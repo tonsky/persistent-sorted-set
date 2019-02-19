@@ -1,4 +1,4 @@
-(defproject persistent-sorted-set "0.1.0"
+(defproject persistent-sorted-set "0.1.1"
   :description "TODO"
   :license {:name "MIT"}
   :url "https://github.com/tonsky/persistent-sorted-set"
@@ -16,6 +16,8 @@
   :source-paths      ["src-clojure"]
   :java-source-paths ["src-java"]
   :test-paths        ["test-clojure"]
+
+  :javac-options ["-target" "8" "-source" "8"]
 
   :aliases {"test-all"  ["do" ["test"] ["test-cljs"]]
             "test-cljs" ["run" "-m" "me.tonsky.persistent-sorted-set.repl/run-tests"]
