@@ -330,6 +330,21 @@
         (is (= 35 (reduce-chunked + 0 (set/rslice s 8 2))))))))
 
 
+#?(:clj
+(deftest iter-over-transient
+  (let [set (transient (into (set/sorted-set) (range 100)))
+        seq (seq set)]
+    (conj! set 100)
+    (is (thrown-with-msg? Exception #"iterating and mutating" (first seq)))
+    (is (thrown-with-msg? Exception #"iterating and mutating" (next seq)))
+    (is (thrown-with-msg? Exception #"iterating and mutating" (reduce + seq)))
+    (is (thrown-with-msg? Exception #"iterating and mutating" (reduce + 0 seq)))
+    (is (thrown-with-msg? Exception #"iterating and mutating" (chunk-first seq)))
+    (is (thrown-with-msg? Exception #"iterating and mutating" (chunk-next seq)))
+    (is (thrown-with-msg? Exception #"iterating and mutating" (.iterator ^Iterable seq)))
+)))
+
+
 (defn into-via-doseq [to from]
   (let [res (transient [])]
     (doseq [x from]  ;; checking chunked iter

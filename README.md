@@ -12,6 +12,13 @@ Almost a drop-in replacement for `clojure.core/sorted-set`, the only difference 
 
 Implementations are provided for Clojure and ClojureScript.
 
+## Building
+
+```
+export JAVA8_HOME="/Library/Java/JavaVirtualMachines/jdk1.8.0_202.jdk/Contents/Home"
+lein jar
+```
+
 ## Support us
 
 <a href="https://www.patreon.com/bePatron?u=4230547"><img src="./extras/become_a_patron_button@2x.png" alt="Become a Patron!" width="217" height="51"></a>
@@ -21,7 +28,7 @@ Implementations are provided for Clojure and ClojureScript.
 Dependency:
 
 ```clj
-[persistent-sorted-set "0.1.0"]
+[persistent-sorted-set "0.1.2"]
 ```
 
 Code:

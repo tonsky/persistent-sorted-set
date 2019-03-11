@@ -90,7 +90,7 @@
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
          0 (PersistentSortedSet. cmp)
-         1 (PersistentSortedSet. {} cmp (first nodes) len edit)
+         1 (PersistentSortedSet. {} cmp (first nodes) len edit 0)
          (recur (mapv ->Node (split nodes (count nodes) Leaf avg max))))))))
 
 
