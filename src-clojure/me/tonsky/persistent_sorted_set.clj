@@ -56,21 +56,21 @@
   ([coll to type avg max]
    (persistent! (split (transient []) 0 coll to type avg max)))
   ([res from coll to type avg max]
-   (let [len (- to from)]
+   (let [len (- ^long to ^long from)]
      (cond
        (== 0 len)
        res
 
-       (>= len (* 2 avg))
-       (recur (conj! res (array-from-indexed coll type from (+ from avg))) (+ from avg) coll to type avg max)
+       (>= len (* 2 ^long avg))
+       (recur (conj! res (array-from-indexed coll type from (+ ^long from ^long avg))) (+ ^long from ^long avg) coll to type avg max)
 
-       (<= len max)
+       (<= len ^long max)
        (conj! res (array-from-indexed coll type from to))
 
        :else
        (-> res
-         (conj! (array-from-indexed coll type from (+ from (quot len 2))))
-         (conj! (array-from-indexed coll type (+ from (quot len 2)) to)))))))
+         (conj! (array-from-indexed coll type from (+ ^long from (quot len 2))))
+         (conj! (array-from-indexed coll type (+ ^long from (quot len 2)) to)))))))
 
 
 (defn from-sorted-array

@@ -2,12 +2,12 @@
   :description "Fast B-tree based persistent sorted set for Clojure/Script"
   :license {:name "MIT"}
   :url "https://github.com/tonsky/persistent-sorted-set"
-  
+
   :dependencies [
-    [org.clojure/clojure       "1.10.0"   :scope "provided"]
-    [org.clojure/clojurescript "1.10.520" :scope "provided"]
+    [org.clojure/clojure       "1.10.1"   :scope "provided"]
+    [org.clojure/clojurescript "1.10.773" :scope "provided"]
   ]
-  
+
   :plugins [
     [lein-cljsbuild "1.1.7"]
     ; [lein-virgil "0.1.9"]
