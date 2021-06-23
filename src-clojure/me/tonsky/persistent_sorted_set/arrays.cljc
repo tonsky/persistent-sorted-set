@@ -112,7 +112,7 @@
        (instance? js/Array x)))
    :clj
    (defn array? [^Object x]
-     (-> x .getClass .isArray)))
+     (some-> x .getClass .isArray)))
 
 
 #?(:clj
