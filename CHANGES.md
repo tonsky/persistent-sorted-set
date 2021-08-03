@@ -1,3 +1,7 @@
+# 0.1.4
+
+Special handling of nils in slice/rslice in CLJS, matching CLJ behaviour #6
+
 # 0.1.3
 
 Fixed NPE in `me.tonsky.persistent-sorted-set.arrays/array?` #4 #5 thx @timothypratley

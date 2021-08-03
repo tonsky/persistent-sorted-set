@@ -57,27 +57,25 @@
     (testing "straight 3 layers"
       (let [s (into (set/sorted-set) (shuffle (irange 0 5000)))]
         (are [from to expected] (= expected (set/slice s from to))
-          #?@(:clj [
-               nil    nil    (irange 0 5000)
-               
-               -1     nil    (irange 0 5000)
-               0      nil    (irange 0 5000)
-               0.5    nil    (irange 1 5000)
-               1      nil    (irange 1 5000)
-               4999   nil    [4999 5000]
-               4999.5 nil    [5000]
-               5000   nil    [5000]
-               5000.5 nil    nil
-               
-               nil    -1     nil
-               nil    0      [0]
-               nil    0.5    [0]
-               nil    1      [0 1]
-               nil    4999   (irange 0 4999)
-               nil    4999.5 (irange 0 4999)
-               nil    5000   (irange 0 5000)
-               nil    5001   (irange 0 5000)
-          ])
+          nil    nil    (irange 0 5000)
+          
+          -1     nil    (irange 0 5000)
+          0      nil    (irange 0 5000)
+          0.5    nil    (irange 1 5000)
+          1      nil    (irange 1 5000)
+          4999   nil    [4999 5000]
+          4999.5 nil    [5000]
+          5000   nil    [5000]
+          5000.5 nil    nil
+
+          nil    -1     nil
+          nil    0      [0]
+          nil    0.5    [0]
+          nil    1      [0 1]
+          nil    4999   (irange 0 4999)
+          nil    4999.5 (irange 0 4999)
+          nil    5000   (irange 0 5000)
+          nil    5001   (irange 0 5000)
 
           -2     -1     nil
           -1     5001   (irange 0 5000)
@@ -91,27 +89,25 @@
     (testing "straight 1 layer, leaf == root"
       (let [s (into (set/sorted-set) (shuffle (irange 0 10)))]
         (are [from to expected] (= expected (set/slice s from to))
-          #?@(:clj [
-               nil  nil  (irange 0 10)
-               
-               -1   nil  (irange 0 10)
-               0    nil  (irange 0 10)
-               0.5  nil  (irange 1 10)
-               1    nil  (irange 1 10)
-               9    nil  [9 10]
-               9.5  nil  [10]
-               10   nil  [10]
-               10.5 nil  nil
-               
-               nil -1   nil
-               nil 0    [0]
-               nil 0.5  [0]
-               nil 1    [0 1]
-               nil 9    (irange 0 9)
-               nil 9.5  (irange 0 9)
-               nil 10   (irange 0 10)
-               nil 11   (irange 0 10)
-          ])
+          nil  nil  (irange 0 10)
+          
+          -1   nil  (irange 0 10)
+          0    nil  (irange 0 10)
+          0.5  nil  (irange 1 10)
+          1    nil  (irange 1 10)
+          9    nil  [9 10]
+          9.5  nil  [10]
+          10   nil  [10]
+          10.5 nil  nil
+          
+          nil -1   nil
+          nil 0    [0]
+          nil 0.5  [0]
+          nil 1    [0 1]
+          nil 9    (irange 0 9)
+          nil 9.5  (irange 0 9)
+          nil 10   (irange 0 10)
+          nil 11   (irange 0 10)
 
           -2   -1  nil
           -1   10  (irange 0 10)
@@ -125,27 +121,25 @@
     (testing "reverse 3 layers"
       (let [s (into (set/sorted-set) (shuffle (irange 0 5000)))]
         (are [from to expected] (= expected (set/rslice s from to))
-          #?@(:clj [
-               nil    nil    (irange 5000 0)
-               
-               5001   nil    (irange 5000 0)
-               5000   nil    (irange 5000 0)
-               4999.5 nil    (irange 4999 0)
-               4999   nil    (irange 4999 0)
-               1      nil    [1 0]
-               0.5    nil    [0]
-               0      nil    [0]
-               -1     nil    nil
-               
-               nil    5001   nil
-               nil    5000   [5000]
-               nil    4999.5 [5000]
-               nil    4999   [5000 4999]
-               nil    1      (irange 5000 1)
-               nil    0.5    (irange 5000 1)
-               nil    0      (irange 5000 0)
-               nil    -1     (irange 5000 0)
-          ])
+          nil    nil    (irange 5000 0)
+          
+          5001   nil    (irange 5000 0)
+          5000   nil    (irange 5000 0)
+          4999.5 nil    (irange 4999 0)
+          4999   nil    (irange 4999 0)
+          1      nil    [1 0]
+          0.5    nil    [0]
+          0      nil    [0]
+          -1     nil    nil
+          
+          nil    5001   nil
+          nil    5000   [5000]
+          nil    4999.5 [5000]
+          nil    4999   [5000 4999]
+          nil    1      (irange 5000 1)
+          nil    0.5    (irange 5000 1)
+          nil    0      (irange 5000 0)
+          nil    -1     (irange 5000 0)
 
           5002   5001   nil
           5001   -1     (irange 5000 0)
@@ -159,27 +153,25 @@
     (testing "reverse 1 layer, leaf == root"
       (let [s (into (set/sorted-set) (shuffle (irange 0 10)))]
         (are [from to expected] (= expected (set/rslice s from to))
-          #?@(:clj [
-               nil nil (irange 10 0)
-               
-               11  nil (irange 10 0)
-               10  nil (irange 10 0)
-               9.5 nil (irange 9 0)
-               9   nil (irange 9 0)
-               1   nil [1 0]
-               0.5 nil [0]
-               0   nil [0]
-               -1  nil nil
-               
-               nil 11  nil
-               nil 10  [10]
-               nil 9.5 [10]
-               nil 9   [10 9]
-               nil 1   (irange 10 1)
-               nil 0.5 (irange 10 1)
-               nil 0   (irange 10 0)
-               nil -1  (irange 10 0)
-          ])
+          nil nil (irange 10 0)
+          
+          11  nil (irange 10 0)
+          10  nil (irange 10 0)
+          9.5 nil (irange 9 0)
+          9   nil (irange 9 0)
+          1   nil [1 0]
+          0.5 nil [0]
+          0   nil [0]
+          -1  nil nil
+          
+          nil 11  nil
+          nil 10  [10]
+          nil 9.5 [10]
+          nil 9   [10 9]
+          nil 1   (irange 10 1)
+          nil 0.5 (irange 10 1)
+          nil 0   (irange 10 0)
+          nil -1  (irange 10 0)
 
           12  11  nil
           11  -1  (irange 10 0)
@@ -193,23 +185,21 @@
     (testing "seq-rseq equivalence"
       (let [s (into (set/sorted-set) (shuffle (irange 0 5000)))]
         (are [from to] (= (set/slice s from to) (some-> (set/slice s from to) (rseq) (reverse)))
-          #?@(:clj [
-               -1     nil
-               0      nil
-               2500   nil
-               5000   nil
-               5001   nil
-               
-               nil    -1
-               nil    0     
-               nil    1     
-               nil    2500
-               nil    5000
-               nil    5001  
-               
-               nil    nil
-          ])
-
+          -1     nil
+          0      nil
+          2500   nil
+          5000   nil
+          5001   nil
+          
+          nil    -1
+          nil    0     
+          nil    1     
+          nil    2500
+          nil    5000
+          nil    5001  
+          
+          nil    nil
+ 
           -1     5001
           0      5000  
           1      4999
@@ -219,22 +209,21 @@
     (testing "rseq-seq equivalence"
       (let [s (into (set/sorted-set) (shuffle (irange 0 5000)))]
         (are [from to] (= (set/rslice s from to) (some-> (set/rslice s from to) (rseq) (reverse)))
-          #?@(:clj [
-               -1     nil
-               0      nil
-               2500   nil
-               5000   nil
-               5001   nil
-               
-               nil    -1
-               nil    0     
-               nil    1     
-               nil    2500
-               nil    5000
-               nil    5001  
-               
-               nil    nil
-          ])
+          -1     nil
+          0      nil
+          2500   nil
+          5000   nil
+          5001   nil
+          
+          nil    -1
+          nil    0     
+          nil    1     
+          nil    2500
+          nil    5000
+          nil    5001  
+          
+          nil    nil
+
           5001   -1    
           5000   0       
           4999   1     

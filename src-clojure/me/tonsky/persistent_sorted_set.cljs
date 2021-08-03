@@ -727,38 +727,42 @@
   "Returns path to first element >= key,
    or -1 if all elements in a set < key"
   [set key comparator]
-  (loop [node  (.-root set)
-         path  empty-path
-         level (.-shift set)]
-    (let [keys-l (node-len node)]
-      (if (== 0 level)
-        (let [keys (.-keys node)
-              idx  (binary-search-l comparator keys (dec keys-l) key)]
-          (if (== keys-l idx) -1 (path-set path 0 idx)))
-        (let [keys (.-keys node)
-              idx  (binary-search-l comparator keys (- keys-l 2) key)]
-          (recur (arrays/aget (.-pointers node) idx)
-                 (path-set path level idx)
-                 (- level level-shift)))))))
+  (if (nil? key)
+    empty-path
+    (loop [node  (.-root set)
+           path  empty-path
+           level (.-shift set)]
+      (let [keys-l (node-len node)]
+        (if (== 0 level)
+          (let [keys (.-keys node)
+                idx  (binary-search-l comparator keys (dec keys-l) key)]
+            (if (== keys-l idx) -1 (path-set path 0 idx)))
+          (let [keys (.-keys node)
+                idx  (binary-search-l comparator keys (- keys-l 2) key)]
+            (recur (arrays/aget (.-pointers node) idx)
+                   (path-set path level idx)
+                   (- level level-shift))))))))
 
 (defn- -rseek
   "Returns path to the first element that is > key.
    If all elements in a set are <= key, returns `(-rpath set) + 1`.
    It’s a virtual path that is bigger than any path in a tree"
   [set key comparator]
-  (loop [node  (.-root set)
-         path  empty-path
-         level (.-shift set)]
-    (let [keys-l (node-len node)]
-      (if (== 0 level)
-        (let [keys (.-keys node)
-              idx  (binary-search-r comparator keys (dec keys-l) key)]
-          (path-set path 0 idx))
-        (let [keys (.-keys node)
-              idx  (binary-search-r comparator keys (- keys-l 2) key)]
-          (recur (arrays/aget (.-pointers node) idx)
-                 (path-set path level idx)
-                 (- level level-shift)))))))
+  (if (nil? key)
+    (inc (-rpath (.-root set) (.-shift set)))
+    (loop [node  (.-root set)
+           path  empty-path
+           level (.-shift set)]
+      (let [keys-l (node-len node)]
+        (if (== 0 level)
+          (let [keys (.-keys node)
+                idx  (binary-search-r comparator keys (dec keys-l) key)]
+            (path-set path 0 idx))
+          (let [keys (.-keys node)
+                idx  (binary-search-r comparator keys (- keys-l 2) key)]
+            (recur (arrays/aget (.-pointers node) idx)
+                   (path-set path level idx)
+                   (- level level-shift))))))))
 
 (defn- -slice [set key-from key-to comparator]
   (let [path (-seek set key-from comparator)]
