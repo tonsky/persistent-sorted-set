@@ -5,14 +5,18 @@ import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Leaf {
-  final Object[] _keys;
+  public final Object[] _keys;
   int _len;
   final Edit _edit;
+  public boolean _is_dirty;
+  public UUID _address;
 
   public Leaf(Object[] keys, int len, Edit edit) {
     _keys = keys;
     _len  = len;
     _edit = edit;
+    _is_dirty = true;
+    _address = null;
   }
 
   public Object maxKey() {
@@ -81,7 +85,7 @@ public class Leaf {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
-    
+
     int ins = -idx-1;
 
     // modifying array in place
@@ -150,12 +154,12 @@ public class Leaf {
         _len = newLen;
         if (idx == newLen) // removed last, need to signal new maxKey
           return new Leaf[]{left, this, right};
-        return PersistentSortedSet.EARLY_EXIT;        
+        return PersistentSortedSet.EARLY_EXIT;
       }
 
       // persistent
       Leaf center = newLeaf(newLen, edit);
-      new Stitch(center._keys, 0) 
+      new Stitch(center._keys, 0)
         .copyAll(_keys, 0, idx)
         .copyAll(_keys, idx+1, _len);
       return new Leaf[] { left, center, right };
@@ -170,7 +174,7 @@ public class Leaf {
         .copyAll(_keys,      idx+1, _len);
       return new Leaf[] { null, join, right };
     }
-    
+
     // can join with right
     if (right != null && newLen + right._len <= PersistentSortedSet.MAX_LEN) {
       Leaf join = newLeaf(newLen + right._len, edit);
@@ -223,9 +227,9 @@ public class Leaf {
           newCenterLen = totalLen >>> 1,
           newRightLen  = totalLen - newCenterLen,
           rightHead    = right._len - newRightLen;
-      
+
       Leaf newCenter, newRight;
-      
+
       // append to center
       if (_edit.editable() && newCenterLen <= _keys.length) {
         newCenter = this;
@@ -262,6 +266,10 @@ public class Leaf {
       if (i > 0) sb.append(" ");
       sb.append(_keys[i].toString());
     }
+    sb.append(" dirty: ");
+    sb.append(_is_dirty);
+    sb.append(" address: ");
+    sb.append(_address);
     return sb.append("}").toString();
   }
 }

@@ -6,6 +6,7 @@
   :dependencies [
     [org.clojure/clojure       "1.10.0"   :scope "provided"]
     [org.clojure/clojurescript "1.10.520" :scope "provided"]
+    [io.replikativ/konserve    "0.6.0-alpha3"]
   ]
   
   :plugins [
@@ -17,7 +18,7 @@
   :java-source-paths ["src-java"]
   :test-paths        ["test-clojure"]
 
-  :javac-options ["-target" "8" "-source" "8" "-bootclasspath" ~(str (or (System/getenv "JAVA8_HOME") (throw (Exception. "Please set JAVA8_HOME"))) "/jre/lib/rt.jar")]
+  ;:javac-options ["-target" "8" "-source" "8" "-bootclasspath" ~(str (or (System/getenv "JAVA8_HOME") (throw (Exception. "Please set JAVA8_HOME"))) "/jre/lib/rt.jar")]
   :jvm-opts ["-ea"]
 
   :aliases {"test-all"  ["do" ["test"] ["test-cljs"]]

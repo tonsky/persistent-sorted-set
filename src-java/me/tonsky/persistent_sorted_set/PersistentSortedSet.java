@@ -18,7 +18,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     MIN_LEN = maxLen >>> 1;
   }
 
-  Leaf _root;
+  public Leaf _root;
   int _count;
   final Edit _edit;
   int _version = 0;
@@ -186,7 +186,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
 
     if (1 == nodes.length)
       return new PersistentSortedSet(_meta, _cmp, nodes[0], _count+1, _edit, _version+1);
-    
+
     Object keys[] = new Object[] { nodes[0].maxKey(), nodes[1].maxKey() };
     Leaf newRoot = new Node(keys, nodes, 2, _edit);
     return new PersistentSortedSet(_meta, _cmp, newRoot, _count+1, _edit, _version+1);
@@ -197,7 +197,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     return disjoin(key, _cmp);
   }
 
-  public PersistentSortedSet disjoin(Object key, Comparator cmp) { 
+  public PersistentSortedSet disjoin(Object key, Comparator cmp) {
     Leaf nodes[] = _root.remove(key, null, null, cmp, _edit);
 
     // not in set

@@ -5,8 +5,8 @@ import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Node extends Leaf {
-  final Leaf[] _children;
-  
+  public final Leaf[] _children;
+
   public Node(Object[] keys, Leaf[] children, int len, Edit edit) {
     super(keys, len, edit);
     _children = children;
@@ -19,7 +19,7 @@ public class Node extends Leaf {
   boolean contains(Object key, Comparator cmp) {
     int idx = search(key, cmp);
     if (idx >= 0) return true;
-    int ins = -idx-1; 
+    int ins = -idx-1;
     if (ins == _len) return false;
     return _children[ins].contains(key, cmp);
   }
@@ -28,7 +28,7 @@ public class Node extends Leaf {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
-    
+
     int ins = -idx-1;
     if (ins == _len) ins = _len-1;
     Leaf[] nodes = _children[ins].add(key, cmp, edit);
@@ -38,7 +38,7 @@ public class Node extends Leaf {
 
     if (PersistentSortedSet.EARLY_EXIT == nodes) // child signalling nothing to update
       return PersistentSortedSet.EARLY_EXIT;
-    
+
     // same len
     if (1 == nodes.length) {
       Leaf node = nodes[0];
@@ -146,7 +146,7 @@ public class Node extends Leaf {
 
     if (idx == _len) // not in set
       return PersistentSortedSet.UNCHANGED;
-    
+
     Leaf leftChild  = idx > 0      ? _children[idx-1] : null,
          rightChild = idx < _len-1 ? _children[idx+1] : null;
     Leaf[] nodes = _children[idx].remove(key, leftChild, rightChild, cmp, edit);
@@ -248,7 +248,7 @@ public class Node extends Leaf {
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children,     idx+2, _len);
       cs.copyAll(right._children, 0, right._len);
-      
+
       return new Leaf[] { left, join, null };
     }
 
@@ -312,7 +312,7 @@ public class Node extends Leaf {
       cs.copyAll(_children, idx+2, _len);
       cs.copyAll(right._children, 0, rightHead);
 
-      ArrayUtil.copy(right._children, rightHead, right._len, newRight._children, 0);        
+      ArrayUtil.copy(right._children, rightHead, right._len, newRight._children, 0);
 
       return new Leaf[] { left, newCenter, newRight };
     }

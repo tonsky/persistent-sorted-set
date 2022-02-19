@@ -3,7 +3,9 @@
   me.tonsky.persistent-sorted-set
   (:refer-clojure :exclude [conj disj sorted-set sorted-set-by])
   (:require
-    [me.tonsky.persistent-sorted-set.arrays :as arrays])
+   [me.tonsky.persistent-sorted-set.arrays :as arrays]
+   [konserve.core :as k]
+   [hasch.core :refer [uuid]])
   (:import
     [java.util Comparator Arrays]
     [me.tonsky.persistent_sorted_set PersistentSortedSet Leaf Node Edit ArrayUtil]))
@@ -113,3 +115,41 @@
   "Create a set with default comparator."
   ([] (PersistentSortedSet/EMPTY))
   ([& keys] (from-sequential compare keys)))
+
+
+
+(defn set-flush [n]
+  ;; is a leaf
+  (if (not (instance? Node n))
+    (let [children (vec (.-_keys n))
+          address (uuid)]
+      (println "write leaf at " address " : " children)
+      (set! (.-_address n) address)
+      (set! (.-_is_dirty n) false)
+      n)
+    (let [children (mapv set-flush (.-_children n))
+          address (uuid)]
+      (println "write node at " address " : " children)
+      (set! (.-_address n) address)
+      (set! (.-_is_dirty n) false)
+      ;; (set! (.-_keys n) nil)
+      n)))
+
+(comment
+
+  (println
+   (.str
+    (.-_root
+     (apply sorted-set (range 500)))
+    1))
+
+  (instance? Node
+             (.-_root
+              (apply sorted-set (range 100)))
+             )
+
+
+  (set-flush (.-_root
+              (apply sorted-set (range 100))))
+
+  )
