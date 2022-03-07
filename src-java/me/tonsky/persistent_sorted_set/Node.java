@@ -26,6 +26,7 @@ public class Node extends Leaf {
     void ensureChildren() {
       if (!_isLoaded) {
         _children = _loader.load(_address);
+        _isLoaded = true;
       }
     }
 
@@ -343,7 +344,11 @@ public class Node extends Leaf {
       for (int j=0; j < lvl; ++j)
         sb.append("| ");
       ensureChildren();
-      sb.append(_keys[i] + ": " + _children[i].str(lvl+1));
+      if (_isLoaded) {
+        sb.append(_keys[i] + ": " + _children[i].str(lvl+1));
+      } else {
+        sb.append(_keys[i] + ": not loaded");
+      }
     }
     return sb.toString();
   }

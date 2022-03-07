@@ -92,7 +92,7 @@
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
          0 (PersistentSortedSet. cmp loader)
-         1 (PersistentSortedSet. {} cmp (first nodes) len edit 0, loader)
+         1 (PersistentSortedSet. {} cmp (first nodes) len edit 0 loader)
          (recur (mapv ->Node (split nodes (count nodes) Leaf avg max))))))))
 
 
@@ -118,40 +118,67 @@
 
 
 
-(defn set-flush [n]
+(defn set-flush [loader n]
   ;; is a leaf
   (if (not (instance? Node n))
-    (let [children (vec (.-_keys n))
+    (let [keys (vec (.-_keys n))
           address (uuid)]
-      (println "write leaf at " address " : " children)
-      (set! (.-_address n) address)
-      (set! (.-_is_dirty n) false)
+      (println "data leaf " keys)
+      ;; TODO use this once we write single addresses
+      #_(set! (.-_address n) address)
+      #_(set! (.-_is_dirty n) false)
       n)
-    (let [children (mapv set-flush (.-_children n))
+    (let [children (into-array Leaf (map (partial set-flush loader)
+                                         (.-_children n)))
           address (uuid)]
       (println "write node at " address " : " children)
+      (.store loader address children)
+      ;; TODO remove children from memory
+      (set! (.-_isLoaded n) false)
+      (set! (.-_children n) nil)
       (set! (.-_address n) address)
       (set! (.-_is_dirty n) false)
-      ;; (set! (.-_keys n) nil)
       n)))
 
 (comment
 
-  (def print-loader
-    (proxy [Loader] []
-      (load [address]
-        (println "loading " address)
-        (make-array Leaf 0))))
+  (def store (atom {}))
 
+  (def loader
+    (proxy [loader] []
+      (load [address]
+        (println "loading " address (get @store address))
+        (get @store address))
+      (store [address children]
+        (println "storing " address children)
+        (swap! store assoc address children)
+        nil)))
+
+  ;; 1. create memory tree
+  (def mem-set (apply (partial sorted-set loader) (range 500)))
+
+  ;; 2. flush to store
+  (set! (.-_root mem-set)
+        (set-flush loader
+                   (.-_root mem-set)))
+
+  ;; 3. access tree by printing and test loading from storage
   (println
    (.str
-    (.-_root
-     (apply (partial sorted-set print-loader) (range 500)))
+    (.-_root mem-set)
     1))
+
+
+  ;; playground
+  (.-_address (.-_root mem-set))
+
+  (.-_children (.-_root mem-set))
+
+  (conj
+   (apply (partial sorted-set loader) (range 500))
+   :foo
+   compare)
 
   (instance? Node
              (.-_root
-              (apply sorted-set (range 100))))
-
-  (set-flush (.-_root
               (apply sorted-set (range 100)))))
