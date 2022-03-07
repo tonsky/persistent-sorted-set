@@ -11,7 +11,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
 
   public static int MIN_LEN = 32, MAX_LEN = 64, EXPAND_LEN = 8;
 
-  public static final PersistentSortedSet EMPTY = new PersistentSortedSet();
+  public static final PersistentSortedSet EMPTY = new PersistentSortedSet(null);
 
   public static void setMaxLen(int maxLen) {
     MAX_LEN = maxLen;
@@ -22,22 +22,25 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   int _count;
   final Edit _edit;
   int _version = 0;
+  Loader _loader;
 
-  PersistentSortedSet() { this(null, RT.DEFAULT_COMPARATOR); }
-  public PersistentSortedSet(Comparator cmp) { this(null, cmp); }
-  public PersistentSortedSet(IPersistentMap meta, Comparator cmp) {
+  PersistentSortedSet(Loader loader) { this(null, RT.DEFAULT_COMPARATOR, loader); }
+  public PersistentSortedSet(Comparator cmp, Loader loader) { this(null, cmp, loader); }
+  public PersistentSortedSet(IPersistentMap meta, Comparator cmp, Loader loader) {
     super(meta, cmp);
     _edit  = new Edit(false);
-    _root  = new Leaf(new Object[]{}, 0, _edit);
+    _root  = new Leaf(loader, new Object[]{}, 0, _edit);
     _count = 0;
+    _loader = loader;
   }
 
-  public PersistentSortedSet(IPersistentMap meta, Comparator cmp, Leaf root, int count, Edit edit, int version) {
+  public PersistentSortedSet(IPersistentMap meta, Comparator cmp, Leaf root, int count, Edit edit, int version, Loader loader) {
     super(meta, cmp);
     _root  = root;
     _count = count;
     _edit  = edit;
     _version = version;
+    _loader = loader;
   }
 
   void ensureEditable(boolean value) {
@@ -136,7 +139,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   // IObj
   public PersistentSortedSet withMeta(IPersistentMap meta) {
     if(_meta == meta) return this;
-    return new PersistentSortedSet(meta, _cmp, _root, _count, _edit, _version);
+    return new PersistentSortedSet(meta, _cmp, _root, _count, _edit, _version, _loader);
   }
 
   // Counted
@@ -159,7 +162,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
 
   // IPersistentCollection
   public PersistentSortedSet empty() {
-    return new PersistentSortedSet(_meta, _cmp);
+    return new PersistentSortedSet(_meta, _cmp, _loader);
   }
 
   public PersistentSortedSet cons(Object key) {
@@ -177,7 +180,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
         _root = nodes[0];
       if (2 == nodes.length) {
         Object keys[] = new Object[] { nodes[0].maxKey(), nodes[1].maxKey() };
-        _root = new Node(keys, nodes, 2, _edit);
+        _root = new Node(_loader, keys, nodes, 2, _edit);
       }
       _count++;
       _version++;
@@ -185,11 +188,11 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     }
 
     if (1 == nodes.length)
-      return new PersistentSortedSet(_meta, _cmp, nodes[0], _count+1, _edit, _version+1);
+      return new PersistentSortedSet(_meta, _cmp, nodes[0], _count+1, _edit, _version+1, _loader);
 
     Object keys[] = new Object[] { nodes[0].maxKey(), nodes[1].maxKey() };
-    Leaf newRoot = new Node(keys, nodes, 2, _edit);
-    return new PersistentSortedSet(_meta, _cmp, newRoot, _count+1, _edit, _version+1);
+    Leaf newRoot = new Node(_loader, keys, nodes, 2, _edit);
+    return new PersistentSortedSet(_meta, _cmp, newRoot, _count+1, _edit, _version+1, _loader);
   }
 
   // IPersistentSet
@@ -215,9 +218,9 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     }
     if (newRoot instanceof Node && newRoot._len == 1) {
       newRoot = ((Node) newRoot)._children[0];
-      return new PersistentSortedSet(_meta, _cmp, newRoot, _count-1, _edit, _version+1);
+      return new PersistentSortedSet(_meta, _cmp, newRoot, _count-1, _edit, _version+1, _loader);
     }
-    return new PersistentSortedSet(_meta, _cmp, newRoot, _count-1, _edit, _version+1);
+    return new PersistentSortedSet(_meta, _cmp, newRoot, _count-1, _edit, _version+1, _loader);
   }
 
   public boolean contains(Object key) {
@@ -227,7 +230,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   // IEditableCollection
   public PersistentSortedSet asTransient() {
     ensureEditable(false);
-    return new PersistentSortedSet(_meta, _cmp, _root, _count, new Edit(true), _version);
+    return new PersistentSortedSet(_meta, _cmp, _root, _count, new Edit(true), _version, _loader);
   }
 
   // ITransientCollection

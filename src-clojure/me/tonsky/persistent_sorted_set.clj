@@ -8,7 +8,7 @@
    [hasch.core :refer [uuid]])
   (:import
     [java.util Comparator Arrays]
-    [me.tonsky.persistent_sorted_set PersistentSortedSet Leaf Node Edit ArrayUtil]))
+    [me.tonsky.persistent_sorted_set PersistentSortedSet Leaf Node Edit ArrayUtil Loader]))
 
 
 (defn conj
@@ -77,35 +77,35 @@
 
 (defn from-sorted-array
   "Fast path to create a set if you already have a sorted array of elements on your hands."
-  ([cmp keys]
-   (from-sorted-array cmp keys (arrays/alength keys)))
-  ([cmp keys len]
+  ([cmp keys loader]
+   (from-sorted-array cmp keys (arrays/alength keys) loader))
+  ([cmp keys len loader]
    (let [max    PersistentSortedSet/MAX_LEN
          avg    (quot (+ PersistentSortedSet/MIN_LEN max) 2)
          edit   (Edit. false)
          ->Leaf (fn [keys]
-                  (Leaf. keys (count keys) edit))
+                  (Leaf. loader keys (count keys) edit))
          ->Node (fn [children]
-                  (Node.
+                  (Node. loader
                     (arrays/amap #(.maxKey ^Leaf %) Object children)
                     children (count children) edit))]
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
-         0 (PersistentSortedSet. cmp)
-         1 (PersistentSortedSet. {} cmp (first nodes) len edit 0)
+         0 (PersistentSortedSet. cmp loader)
+         1 (PersistentSortedSet. {} cmp (first nodes) len edit 0, loader)
          (recur (mapv ->Node (split nodes (count nodes) Leaf avg max))))))))
 
 
 (defn from-sequential
   "Create a set with custom comparator and a collection of keys. Useful when you don’t want to call [[clojure.core/apply]] on [[sorted-set-by]]."
-  [^Comparator cmp keys]
+  [^Comparator cmp keys loader]
   (let [arr (to-array keys)
         _   (arrays/asort arr cmp)
         len (ArrayUtil/distinct cmp arr)]
-    (from-sorted-array cmp arr len)))
+    (from-sorted-array cmp arr len loader)))
 
 
-(defn sorted-set-by
+#_(defn sorted-set-by
   "Create a set with custom comparator."
   ([cmp] (PersistentSortedSet. ^Comparator cmp))
   ([cmp & keys] (from-sequential cmp keys)))
@@ -113,8 +113,8 @@
 
 (defn sorted-set
   "Create a set with default comparator."
-  ([] (PersistentSortedSet/EMPTY))
-  ([& keys] (from-sequential compare keys)))
+  ([loader] (PersistentSortedSet/EMPTY))
+  ([loader & keys] (from-sequential compare keys loader)))
 
 
 
@@ -137,19 +137,21 @@
 
 (comment
 
+  (def print-loader
+    (proxy [Loader] []
+      (load [address]
+        (println "loading " address)
+        (make-array Leaf 0))))
+
   (println
    (.str
     (.-_root
-     (apply sorted-set (range 500)))
+     (apply (partial sorted-set print-loader) (range 500)))
     1))
 
   (instance? Node
              (.-_root
-              (apply sorted-set (range 100)))
-             )
-
-
-  (set-flush (.-_root
               (apply sorted-set (range 100))))
 
-  )
+  (set-flush (.-_root
+              (apply sorted-set (range 100)))))

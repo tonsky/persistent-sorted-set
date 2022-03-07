@@ -10,13 +10,15 @@ public class Leaf {
   final Edit _edit;
   public boolean _is_dirty;
   public UUID _address;
+  public final Loader _loader;
 
-  public Leaf(Object[] keys, int len, Edit edit) {
+  public Leaf(Loader loader, Object[] keys, int len, Edit edit) {
     _keys = keys;
     _len  = len;
     _edit = edit;
     _is_dirty = true;
     _address = null;
+    _loader = loader;
   }
 
   public Object maxKey() {
@@ -25,9 +27,9 @@ public class Leaf {
 
   Leaf newLeaf(int len, Edit edit) {
     if (edit.editable())
-      return new Leaf(new Object[Math.min(PersistentSortedSet.MAX_LEN, len + PersistentSortedSet.EXPAND_LEN)], len, edit);
+        return new Leaf(_loader, new Object[Math.min(PersistentSortedSet.MAX_LEN, len + PersistentSortedSet.EXPAND_LEN)], len, edit);
     else
-      return new Leaf(new Object[len], len, edit);
+        return new Leaf(_loader, new Object[len], len, edit);
   }
 
   int search(Object key, Comparator cmp) {

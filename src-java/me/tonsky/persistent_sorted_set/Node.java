@@ -5,22 +5,36 @@ import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Node extends Leaf {
-  public final Leaf[] _children;
+  public Leaf[] _children; // make final again? perf. impact?
+  public Boolean _isLoaded = false;
 
-  public Node(Object[] keys, Leaf[] children, int len, Edit edit) {
-    super(keys, len, edit);
+  public Node(Loader loader, Object[] keys, Leaf[] children, int len, Edit edit) {
+    super(loader, keys, len, edit);
     _children = children;
+    _isLoaded = true;
   }
 
-  Node newNode(int len, Edit edit) {
-    return new Node(new Object[len], new Leaf[len], len, edit);
-  }
+    Node newNode(int len, Edit edit) {
+      return new Node(_loader, new Object[len], new Leaf[len], len, edit);
+    }
+
+    // used by loader only
+    public Node(Loader loader, Object[] keys, int len, Edit edit) {
+      super(loader, keys, len, edit);
+    }
+
+    void ensureChildren() {
+      if (!_isLoaded) {
+        _children = _loader.load(_address);
+      }
+    }
 
   boolean contains(Object key, Comparator cmp) {
     int idx = search(key, cmp);
     if (idx >= 0) return true;
     int ins = -idx-1;
     if (ins == _len) return false;
+    ensureChildren();
     return _children[ins].contains(key, cmp);
   }
 
@@ -31,6 +45,7 @@ public class Node extends Leaf {
 
     int ins = -idx-1;
     if (ins == _len) ins = _len-1;
+    ensureChildren();
     Leaf[] nodes = _children[ins].add(key, cmp, edit);
 
     if (PersistentSortedSet.UNCHANGED == nodes) // child signalling already in set
@@ -64,7 +79,7 @@ public class Node extends Leaf {
         newChildren[ins] = node;
       }
 
-      return new Leaf[]{new Node(newKeys, newChildren, _len, edit)};
+      return new Leaf[]{new Node(_loader, newKeys, newChildren, _len, edit)};
     }
 
     // len + 1
@@ -108,8 +123,8 @@ public class Node extends Leaf {
         .copyAll(_children, ins+1, half1-1);
       Leaf children2[] = new Leaf[half2];
       ArrayUtil.copy(_children, half1-1, _len, children2, 0);
-      return new Leaf[]{new Node(keys1, children1, half1, edit),
-                        new Node(keys2, children2, half2, edit)};
+      return new Leaf[]{new Node(_loader, keys1, children1, half1, edit),
+          new Node(_loader, keys2, children2, half2, edit)};
     }
 
     // add to second half
@@ -132,8 +147,8 @@ public class Node extends Leaf {
       .copyOne(nodes[0])
       .copyOne(nodes[1])
       .copyAll(_children, ins+1, _len);
-    return new Leaf[]{new Node(keys1, children1, half1, edit),
-                      new Node(keys2, children2, half2, edit)};
+    return new Leaf[]{new Node(_loader, keys1, children1, half1, edit),
+        new Node(_loader, keys2, children2, half2, edit)};
   }
 
   Leaf[] remove(Object key, Leaf left, Leaf right, Comparator cmp, Edit edit) {
@@ -147,6 +162,7 @@ public class Node extends Leaf {
     if (idx == _len) // not in set
       return PersistentSortedSet.UNCHANGED;
 
+    ensureChildren();
     Leaf leftChild  = idx > 0      ? _children[idx-1] : null,
          rightChild = idx < _len-1 ? _children[idx+1] : null;
     Leaf[] nodes = _children[idx].remove(key, leftChild, rightChild, cmp, edit);
@@ -326,6 +342,7 @@ public class Node extends Leaf {
       sb.append("\n");
       for (int j=0; j < lvl; ++j)
         sb.append("| ");
+      ensureChildren();
       sb.append(_keys[i] + ": " + _children[i].str(lvl+1));
     }
     return sb.toString();
