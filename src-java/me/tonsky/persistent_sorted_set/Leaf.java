@@ -8,16 +8,14 @@ public class Leaf {
   public final Object[] _keys;
   int _len;
   final Edit _edit;
-  public boolean _is_dirty;
-  public UUID _address;
+  public boolean _isDirty;
   public final Loader _loader;
 
   public Leaf(Loader loader, Object[] keys, int len, Edit edit) {
     _keys = keys;
     _len  = len;
     _edit = edit;
-    _is_dirty = true;
-    _address = null;
+    _isDirty = true;
     _loader = loader;
   }
 
@@ -269,9 +267,7 @@ public class Leaf {
       sb.append(_keys[i].toString());
     }
     sb.append(" dirty: ");
-    sb.append(_is_dirty);
-    sb.append(" address: ");
-    sb.append(_address);
+    sb.append(_isDirty);
     return sb.append("}").toString();
   }
 }

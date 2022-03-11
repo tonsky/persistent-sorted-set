@@ -1,14 +1,12 @@
-(ns ^{:author "Nikita Prokopov"
+(ns ^{:author "Nikita Prokopov & Christian Weilbach"
       :doc "A B-tree based persistent sorted set. Supports transients, custom comparators, fast iteration, efficient slices (iterator over a part of the set) and reverse slices. Almost a drop-in replacement for [[clojure.core/sorted-set]], the only difference being this one can’t store nil."}
   me.tonsky.persistent-sorted-set
   (:refer-clojure :exclude [conj disj sorted-set sorted-set-by])
   (:require
-   [me.tonsky.persistent-sorted-set.arrays :as arrays]
-   [konserve.core :as k]
-   [hasch.core :refer [uuid]])
+   [me.tonsky.persistent-sorted-set.arrays :as arrays])
   (:import
     [java.util Comparator Arrays]
-    [me.tonsky.persistent_sorted_set PersistentSortedSet Leaf Node Edit ArrayUtil Loader]))
+    [me.tonsky.persistent_sorted_set PersistentSortedSet Leaf Node Edit ArrayUtil Loader Edit]))
 
 
 (defn conj
@@ -105,10 +103,10 @@
     (from-sorted-array cmp arr len loader)))
 
 
-#_(defn sorted-set-by
+(defn sorted-set-by
   "Create a set with custom comparator."
-  ([cmp] (PersistentSortedSet. ^Comparator cmp))
-  ([cmp & keys] (from-sequential cmp keys)))
+  ([cmp loader] (PersistentSortedSet. ^Comparator cmp loader))
+  ([cmp loader & keys] (from-sequential cmp keys loader)))
 
 
 (defn sorted-set
@@ -117,50 +115,78 @@
   ([loader & keys] (from-sequential compare keys loader)))
 
 
+;; code for durability
 
-(defn set-flush [loader n]
-  ;; is a leaf
-  (if (not (instance? Node n))
-    (let [keys (vec (.-_keys n))
-          address (uuid)]
-      (println "data leaf " keys)
-      ;; TODO use this once we write single addresses
-      #_(set! (.-_address n) address)
-      #_(set! (.-_is_dirty n) false)
-      n)
-    (let [children (into-array Leaf (map (partial set-flush loader)
-                                         (.-_children n)))
-          address (uuid)]
-      (println "write node at " address " : " children)
-      (.store loader address children)
-      ;; TODO remove children from memory
-      (set! (.-_isLoaded n) false)
-      (set! (.-_children n) nil)
-      (set! (.-_address n) address)
-      (set! (.-_is_dirty n) false)
-      n)))
+(defprotocol FlushNode
+  (-flush [n]))
+
+(extend-protocol FlushNode
+  Leaf
+  (-flush [n] n)
+  Node
+  (-flush [n]
+    (if (not (.-_isDirty n))
+      n
+      (let [loader (.-_loader n)
+            children (into-array Leaf (map #(-flush %) (.-_children n)))
+            address (.store loader children)]
+        (set! (.-_address n) address)
+        (set! (.-_isDirty n) false)
+        (set! (.-_isLoaded n) false)
+        (set! (.-_children n) nil)
+        n))))
+
+(defprotocol NodeToMap
+  (-to-map [this]))
+
+(extend-protocol NodeToMap
+  Leaf
+  (-to-map [this]
+    {:type ::leaf
+     :version 1
+     :keys (vec (.-_keys this))})
+  Node
+  (-to-map [this]
+    (assert (nil? (.-_children this)))
+    {:type ::node
+     :version 1
+     :keys (vec (.-_keys this))
+     :address (.-_address this)}))
+
+(defn map->node [loader m]
+  (let [{:keys [type keys address]} m]
+    (if (= type ::node)
+      (Node. loader (into-array Object keys) (count keys) (Edit. false) address)
+      (Leaf. loader (into-array Object keys) (count keys) (Edit. false)))))
 
 (comment
 
-  (def store (atom {}))
+  (require '[konserve.core :as k]
+           '[hasch.core :refer [uuid]]
+           '[konserve.filestore :refer [new-fs-store]]
+           '[clojure.core.async :as async])
 
-  (def loader
-    (proxy [loader] []
+  (def fs-store (async/<!! (new-fs-store "/tmp/pss-store/")))
+
+  (def fs-loader
+    (proxy [Loader] []
       (load [address]
-        (println "loading " address (get @store address))
-        (get @store address))
-      (store [address children]
-        (println "storing " address children)
-        (swap! store assoc address children)
-        nil)))
+        (println "loading " address)
+        (let [children-as-maps (async/<!! (k/get fs-store address))]
+          (into-array Leaf (map #(map->node this %) children-as-maps))))
+      (store [children]
+        (let [children-as-maps (mapv (fn [n] (-to-map n)) children)
+              address (uuid)]
+          (println "storing " address #_children-as-maps)
+          (async/<!! (k/assoc fs-store address children-as-maps))
+          address))))
 
   ;; 1. create memory tree
-  (def mem-set (apply (partial sorted-set loader) (range 500)))
+  (def mem-set (apply (partial sorted-set fs-loader) (range 50000)))
 
   ;; 2. flush to store
   (set! (.-_root mem-set)
-        (set-flush loader
-                   (.-_root mem-set)))
+        (-flush (.-_root mem-set)))
 
   ;; 3. access tree by printing and test loading from storage
   (println
@@ -168,6 +194,8 @@
     (.-_root mem-set)
     1))
 
+  (take 100 mem-set)
+  (take-last 100 mem-set)
 
   ;; playground
   (.-_address (.-_root mem-set))

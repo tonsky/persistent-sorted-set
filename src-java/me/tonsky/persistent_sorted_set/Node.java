@@ -7,11 +7,13 @@ import clojure.lang.*;
 public class Node extends Leaf {
   public Leaf[] _children; // make final again? perf. impact?
   public Boolean _isLoaded = false;
+  public UUID _address;
 
   public Node(Loader loader, Object[] keys, Leaf[] children, int len, Edit edit) {
     super(loader, keys, len, edit);
     _children = children;
     _isLoaded = true;
+    _address = null;
   }
 
     Node newNode(int len, Edit edit) {
@@ -19,8 +21,9 @@ public class Node extends Leaf {
     }
 
     // used by loader only
-    public Node(Loader loader, Object[] keys, int len, Edit edit) {
+    public Node(Loader loader, Object[] keys, int len, Edit edit, UUID address) {
       super(loader, keys, len, edit);
+      _address = address;
     }
 
     void ensureChildren() {
@@ -350,6 +353,8 @@ public class Node extends Leaf {
         sb.append(_keys[i] + ": not loaded");
       }
     }
+    sb.append(" address: ");
+    sb.append(_address);
     return sb.toString();
   }
 }
