@@ -6,7 +6,7 @@ import clojure.lang.*;
 @SuppressWarnings("unchecked")
 public class Leaf {
   public final Object[] _keys;
-  int _len;
+  public int _len;
   final Edit _edit;
   public boolean _isDirty;
   public final Loader _loader;

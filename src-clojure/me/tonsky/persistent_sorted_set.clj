@@ -144,20 +144,22 @@
   (-to-map [this]
     {:type ::leaf
      :version 1
+     :len (.-_len this)
      :keys (vec (.-_keys this))})
   Node
   (-to-map [this]
     (assert (nil? (.-_children this)))
     {:type ::node
      :version 1
+     :len (.-_len this)
      :keys (vec (.-_keys this))
      :address (.-_address this)}))
 
 (defn map->node [loader m]
-  (let [{:keys [type keys address]} m]
+  (let [{:keys [type len keys address]} m]
     (if (= type ::node)
-      (Node. loader (into-array Object keys) (count keys) (Edit. false) address)
-      (Leaf. loader (into-array Object keys) (count keys) (Edit. false)))))
+      (Node. loader (into-array Object keys) len (Edit. false) address)
+      (Leaf. loader (into-array Object keys) len (Edit. false)))))
 
 (comment
 
