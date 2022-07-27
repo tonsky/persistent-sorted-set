@@ -28,8 +28,10 @@ public class Node extends Leaf {
 
     void ensureChildren() {
       if (!_isLoaded) {
-        _children = _loader.load(_address);
+        _children = _loader.load(this);
         _isLoaded = true;
+      } else {
+        _loader.hitCache(this);
       }
     }
 

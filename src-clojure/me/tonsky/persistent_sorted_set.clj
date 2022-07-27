@@ -129,11 +129,9 @@
       n
       (let [loader (.-_loader n)
             children (into-array Leaf (map #(-flush %) (.-_children n)))
-            address (.store loader children)]
+            address (.store loader n children)]
         (set! (.-_address n) address)
         (set! (.-_isDirty n) false)
-        (set! (.-_isLoaded n) false)
-        (set! (.-_children n) nil)
         n))))
 
 (defprotocol NodeToMap
@@ -148,7 +146,6 @@
      :keys (vec (.-_keys this))})
   Node
   (-to-map [this]
-    (assert (nil? (.-_children this)))
     {:type ::node
      :version 1
      :len (.-_len this)
@@ -166,20 +163,41 @@
   (require '[konserve.core :as k]
            '[hasch.core :refer [uuid]]
            '[konserve.filestore :refer [new-fs-store]]
+           '[clojure.core.cache.wrapped :as wrapped]
+           '[clojure.data :as data]
            '[clojure.core.async :as async])
 
   (def fs-store (async/<!! (new-fs-store "/tmp/pss-store/")))
 
+  (def cache (wrapped/lru-cache-factory {} :threshold 1024))
+
+  (add-watch cache :free-memory
+             (fn [_ _ old new]
+               (let [[delta _ _] (data/diff old new)]
+                 (doseq [node (keys delta)]
+                   (println "freeing node: " (.-_address node) (count old) (count new))
+                   (set! (.-_isLoaded node) false)
+                   (set! (.-_children node) nil)))))
+
   (def fs-loader
     (proxy [Loader] []
-      (load [address]
-        (println "loading " address)
-        (let [children-as-maps (async/<!! (k/get fs-store address))]
-          (into-array Leaf (map #(map->node this %) children-as-maps))))
-      (store [children]
+      (hitCache [node]
+        #_(println "hitting " (.-_address node))
+        (wrapped/hit cache node)
+        nil)
+      (load [node]
+        (let [address (.-_address node)
+              new-array (wrapped/lookup-or-miss cache node
+                                                (fn []
+                                                  #_(println "loading " address)
+                                                  (into-array Leaf (map #(map->node this %)
+                                                                        (async/<!! (k/get fs-store address))))))]
+          new-array))
+      (store [node children]
         (let [children-as-maps (mapv (fn [n] (-to-map n)) children)
               address (uuid)]
-          (println "storing " address #_children-as-maps)
+          (wrapped/miss cache node children)
+          #_(println "storing " address)
           (async/<!! (k/assoc fs-store address children-as-maps))
           address))))
 
@@ -196,19 +214,13 @@
     (.-_root mem-set)
     1))
 
-  (take 100 mem-set)
-  (take-last 100 mem-set)
+  (count (take 100 mem-set))
+
+  (count (take-last 100 mem-set))
 
   ;; playground
   (.-_address (.-_root mem-set))
 
   (.-_children (.-_root mem-set))
 
-  (conj
-   (apply (partial sorted-set loader) (range 500))
-   :foo
-   compare)
-
-  (instance? Node
-             (.-_root
-              (apply sorted-set (range 100)))))
+  )
