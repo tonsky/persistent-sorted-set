@@ -169,15 +169,16 @@
 
   (def fs-store (async/<!! (new-fs-store "/tmp/pss-store/")))
 
-  (def cache (wrapped/lru-cache-factory {} :threshold 1024))
+  (def cache (wrapped/lru-cache-factory {} :threshold 10))
 
   (add-watch cache :free-memory
              (fn [_ _ old new]
-               (let [[delta _ _] (data/diff old new)]
-                 (doseq [node (keys delta)]
+               (let [[delta _ _] (data/diff (set (keys old)) (set (keys new)))]
+                 (doseq [node delta]
                    (println "freeing node: " (.-_address node) (count old) (count new))
-                   (set! (.-_isLoaded node) false)
-                   (set! (.-_children node) nil)))))
+                   (locking node
+                     (set! (.-_isLoaded node) false)
+                     (set! (.-_children node) nil))))))
 
   (def fs-loader
     (proxy [Loader] []
@@ -188,8 +189,8 @@
       (load [node]
         (let [address (.-_address node)
               new-array (wrapped/lookup-or-miss cache node
-                                                (fn []
-                                                  #_(println "loading " address)
+                                                (fn [_]
+                                                  (println "loading " address)
                                                   (into-array Leaf (map #(map->node this %)
                                                                         (async/<!! (k/get fs-store address))))))]
           new-array))
@@ -204,9 +205,16 @@
   ;; 1. create memory tree
   (def mem-set (apply (partial sorted-set fs-loader) (range 50000)))
 
+  (def new-mem-set (into mem-set (range 50000 100000)))
+
   ;; 2. flush to store
   (set! (.-_root mem-set)
         (-flush (.-_root mem-set)))
+
+  (set! (.-_root new-mem-set)
+        (-flush (.-_root new-mem-set)))
+
+
 
   ;; 3. access tree by printing and test loading from storage
   (println
@@ -214,9 +222,11 @@
     (.-_root mem-set)
     1))
 
+  (count @cache)
+
   (count (take 100 mem-set))
 
-  (count (take-last 100 mem-set))
+  (count (take-last 100 new-mem-set))
 
   ;; playground
   (.-_address (.-_root mem-set))
