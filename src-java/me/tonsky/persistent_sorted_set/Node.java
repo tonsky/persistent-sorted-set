@@ -9,31 +9,31 @@ public class Node extends Leaf {
   public Boolean _isLoaded = false;
   public UUID _address;
 
-  public Node(Loader loader, Object[] keys, Leaf[] children, int len, Edit edit) {
-    super(loader, keys, len, edit);
+  public Node(StorageBackend storage, Object[] keys, Leaf[] children, int len, Edit edit) {
+    super(storage, keys, len, edit);
     _children = children;
     _isLoaded = true;
     _address = null;
   }
 
     Node newNode(int len, Edit edit) {
-      return new Node(_loader, new Object[len], new Leaf[len], len, edit);
+      return new Node(_storage, new Object[len], new Leaf[len], len, edit);
     }
 
-    // used by loader only
-    public Node(Loader loader, Object[] keys, int len, Edit edit, UUID address) {
-      super(loader, keys, len, edit);
+    // used by storage only
+    public Node(StorageBackend storage, Object[] keys, int len, Edit edit, UUID address) {
+      super(storage, keys, len, edit);
       _address = address;
     }
 
     void ensureChildren() {
       if (!_isLoaded) {
         synchronized(this) {
-          _children = _loader.load(this);
+          _children = _storage.load(this);
           _isLoaded = true;
         }
       } else {
-        _loader.hitCache(this);
+        _storage.hitCache(this);
       }
     }
 
@@ -87,7 +87,7 @@ public class Node extends Leaf {
         newChildren[ins] = node;
       }
 
-      return new Leaf[]{new Node(_loader, newKeys, newChildren, _len, edit)};
+      return new Leaf[]{new Node(_storage, newKeys, newChildren, _len, edit)};
     }
 
     // len + 1
@@ -131,8 +131,8 @@ public class Node extends Leaf {
         .copyAll(_children, ins+1, half1-1);
       Leaf children2[] = new Leaf[half2];
       ArrayUtil.copy(_children, half1-1, _len, children2, 0);
-      return new Leaf[]{new Node(_loader, keys1, children1, half1, edit),
-          new Node(_loader, keys2, children2, half2, edit)};
+      return new Leaf[]{new Node(_storage, keys1, children1, half1, edit),
+          new Node(_storage, keys2, children2, half2, edit)};
     }
 
     // add to second half
@@ -155,8 +155,8 @@ public class Node extends Leaf {
       .copyOne(nodes[0])
       .copyOne(nodes[1])
       .copyAll(_children, ins+1, _len);
-    return new Leaf[]{new Node(_loader, keys1, children1, half1, edit),
-        new Node(_loader, keys2, children2, half2, edit)};
+    return new Leaf[]{new Node(_storage, keys1, children1, half1, edit),
+        new Node(_storage, keys2, children2, half2, edit)};
   }
 
   Leaf[] remove(Object key, Leaf left, Leaf right, Comparator cmp, Edit edit) {

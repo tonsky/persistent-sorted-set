@@ -9,14 +9,14 @@ public class Leaf {
   public int _len;
   final Edit _edit;
   public boolean _isDirty;
-  public final Loader _loader;
+  public final StorageBackend _storage;
 
-  public Leaf(Loader loader, Object[] keys, int len, Edit edit) {
+  public Leaf(StorageBackend storage, Object[] keys, int len, Edit edit) {
     _keys = keys;
     _len  = len;
     _edit = edit;
     _isDirty = true;
-    _loader = loader;
+    _storage = storage;
   }
 
   public Object maxKey() {
@@ -25,9 +25,9 @@ public class Leaf {
 
   Leaf newLeaf(int len, Edit edit) {
     if (edit.editable())
-        return new Leaf(_loader, new Object[Math.min(PersistentSortedSet.MAX_LEN, len + PersistentSortedSet.EXPAND_LEN)], len, edit);
+        return new Leaf(_storage, new Object[Math.min(PersistentSortedSet.MAX_LEN, len + PersistentSortedSet.EXPAND_LEN)], len, edit);
     else
-        return new Leaf(_loader, new Object[len], len, edit);
+        return new Leaf(_storage, new Object[len], len, edit);
   }
 
   int search(Object key, Comparator cmp) {

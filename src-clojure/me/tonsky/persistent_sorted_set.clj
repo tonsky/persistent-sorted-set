@@ -6,7 +6,7 @@
    [me.tonsky.persistent-sorted-set.arrays :as arrays])
   (:import
     [java.util Comparator Arrays]
-    [me.tonsky.persistent_sorted_set PersistentSortedSet Leaf Node Edit ArrayUtil Loader Edit]))
+    [me.tonsky.persistent_sorted_set PersistentSortedSet Leaf Node Edit ArrayUtil StorageBackend Edit]))
 
 
 (defn conj
@@ -75,44 +75,44 @@
 
 (defn from-sorted-array
   "Fast path to create a set if you already have a sorted array of elements on your hands."
-  ([cmp keys loader]
-   (from-sorted-array cmp keys (arrays/alength keys) loader))
-  ([cmp keys len loader]
+  ([cmp keys storage]
+   (from-sorted-array cmp keys (arrays/alength keys) storage))
+  ([cmp keys len storage]
    (let [max    PersistentSortedSet/MAX_LEN
          avg    (quot (+ PersistentSortedSet/MIN_LEN max) 2)
          edit   (Edit. false)
          ->Leaf (fn [keys]
-                  (Leaf. loader keys (count keys) edit))
+                  (Leaf. storage keys (count keys) edit))
          ->Node (fn [children]
-                  (Node. loader
+                  (Node. storage
                     (arrays/amap #(.maxKey ^Leaf %) Object children)
                     children (count children) edit))]
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
-         0 (PersistentSortedSet. cmp loader)
-         1 (PersistentSortedSet. {} cmp (first nodes) len edit 0 loader)
+         0 (PersistentSortedSet. cmp storage)
+         1 (PersistentSortedSet. {} cmp (first nodes) len edit 0 storage)
          (recur (mapv ->Node (split nodes (count nodes) Leaf avg max))))))))
 
 
 (defn from-sequential
   "Create a set with custom comparator and a collection of keys. Useful when you don’t want to call [[clojure.core/apply]] on [[sorted-set-by]]."
-  [^Comparator cmp keys loader]
+  [^Comparator cmp keys storage]
   (let [arr (to-array keys)
         _   (arrays/asort arr cmp)
         len (ArrayUtil/distinct cmp arr)]
-    (from-sorted-array cmp arr len loader)))
+    (from-sorted-array cmp arr len storage)))
 
 
 (defn sorted-set-by
   "Create a set with custom comparator."
-  ([cmp loader] (PersistentSortedSet. ^Comparator cmp loader))
-  ([cmp loader & keys] (from-sequential cmp keys loader)))
+  ([cmp storage] (PersistentSortedSet. ^Comparator cmp storage))
+  ([cmp storage & keys] (from-sequential cmp keys storage)))
 
 
 (defn sorted-set
   "Create a set with default comparator."
-  ([loader] (PersistentSortedSet/EMPTY))
-  ([loader & keys] (from-sequential compare keys loader)))
+  ([storage] (PersistentSortedSet/EMPTY))
+  ([storage & keys] (from-sequential compare keys storage)))
 
 
 ;; code for durability
@@ -127,9 +127,9 @@
   (-flush [n]
     (if (not (.-_isDirty n))
       n
-      (let [loader (.-_loader n)
+      (let [storage (.-_storage n)
             children (into-array Leaf (map #(-flush %) (.-_children n)))
-            address (.store loader n children)]
+            address (.store storage n children)]
         (set! (.-_address n) address)
         (set! (.-_isDirty n) false)
         n))))
@@ -152,11 +152,11 @@
      :keys (vec (.-_keys this))
      :address (.-_address this)}))
 
-(defn map->node [loader m]
+(defn map->node [storage m]
   (let [{:keys [type len keys address]} m]
     (if (= type ::node)
-      (Node. loader (into-array Object keys) len (Edit. false) address)
-      (Leaf. loader (into-array Object keys) len (Edit. false)))))
+      (Node. storage (into-array Object keys) len (Edit. false) address)
+      (Leaf. storage (into-array Object keys) len (Edit. false)))))
 
 (comment
 
@@ -180,8 +180,8 @@
                      (set! (.-_isLoaded node) false)
                      (set! (.-_children node) nil))))))
 
-  (def fs-loader
-    (proxy [Loader] []
+  (def fs-storage
+    (proxy [StorageBackend] []
       (hitCache [node]
         #_(println "hitting " (.-_address node))
         (wrapped/hit cache node)
@@ -203,7 +203,7 @@
           address))))
 
   ;; 1. create memory tree
-  (def mem-set (apply (partial sorted-set fs-loader) (range 50000)))
+  (def mem-set (apply (partial sorted-set fs-storage) (range 50000)))
 
   (def new-mem-set (into mem-set (range 50000 100000)))
 
