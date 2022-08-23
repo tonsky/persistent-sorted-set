@@ -72,9 +72,16 @@
          (conj! (array-from-indexed coll type from (+ from (quot len 2))))
          (conj! (array-from-indexed coll type (+ from (quot len 2)) to)))))))
 
+(def null-storage
+  (proxy [StorageBackend] []
+    (hitCache [node] nil)
+    (load [node] nil)
+    (store [node children] nil)))
 
 (defn from-sorted-array
   "Fast path to create a set if you already have a sorted array of elements on your hands."
+  ([cmp keys]
+   (from-sorted-array cmp keys null-storage))
   ([cmp keys storage]
    (from-sorted-array cmp keys (arrays/alength keys) storage))
   ([cmp keys len storage]
@@ -96,22 +103,26 @@
 
 (defn from-sequential
   "Create a set with custom comparator and a collection of keys. Useful when you don’t want to call [[clojure.core/apply]] on [[sorted-set-by]]."
-  [^Comparator cmp keys storage]
-  (let [arr (to-array keys)
-        _   (arrays/asort arr cmp)
-        len (ArrayUtil/distinct cmp arr)]
-    (from-sorted-array cmp arr len storage)))
+  ([^Comparator cmp keys]
+   (from-sequential cmp keys null-storage))
+  ([^Comparator cmp keys storage]
+   (let [arr (to-array keys)
+         _   (arrays/asort arr cmp)
+         len (ArrayUtil/distinct cmp arr)]
+     (from-sorted-array cmp arr len storage))))
 
 
 (defn sorted-set-by
   "Create a set with custom comparator."
+  ([cmp] (sorted-set-by cmp null-storage))
   ([cmp storage] (PersistentSortedSet. ^Comparator cmp storage))
   ([cmp storage & keys] (from-sequential cmp keys storage)))
 
 
 (defn sorted-set
   "Create a set with default comparator."
-  ([storage] (PersistentSortedSet/EMPTY))
+  ([] (PersistentSortedSet. compare null-storage))
+  ([storage] (PersistentSortedSet. compare storage))
   ([storage & keys] (from-sequential compare keys storage)))
 
 
@@ -125,13 +136,16 @@
   (-flush [n] n)
   Node
   (-flush [n]
-    (if (not (.-_isDirty n))
+    (if (not (.get (.-_isDirty n)))
       n
-      (let [storage (.-_storage n)
+      (let [_write (.-_write n)
+            _ (.lock _write)
+            storage (.-_storage n)
             children (into-array Leaf (map #(-flush %) (.-_children n)))
             address (.store storage n children)]
         (set! (.-_address n) address)
-        (set! (.-_isDirty n) false)
+        (.set (.-_isDirty n) false)
+        (.unlock _write)
         n))))
 
 (defprotocol NodeToMap
@@ -174,11 +188,16 @@
   (add-watch cache :free-memory
              (fn [_ _ old new]
                (let [[delta _ _] (data/diff (set (keys old)) (set (keys new)))]
-                 (doseq [node delta]
-                   (println "freeing node: " (.-_address node) (count old) (count new))
-                   (locking node
-                     (set! (.-_isLoaded node) false)
-                     (set! (.-_children node) nil))))))
+                 (doseq [^me.tonsky.persistent_sorted_set.Node node delta]
+                   (let [_write (.-_write node)]
+                     (.lock _write)
+                     (println "freeing node: " (.-_address node) (count old) (count new))
+                     (.set (.-_isLoaded node) false)
+                     (set! (.-_children node) nil)
+                     #_(let [children ]
+                       (doseq [i (range (alength children))]
+                         (aset children i nil)))
+                     (.unlock _write))))))
 
   (def fs-storage
     (proxy [StorageBackend] []
@@ -188,16 +207,18 @@
         nil)
       (load [node]
         (let [address (.-_address node)
-              new-array (wrapped/lookup-or-miss cache node
-                                                (fn [_]
-                                                  (println "loading " address)
-                                                  (into-array Leaf (map #(map->node this %)
-                                                                        (async/<!! (k/get fs-store address))))))]
-          new-array))
+              new-children (mapv #(map->node this %)
+                                 (async/<!! (k/get fs-store address)))]
+          (println "loading " address)
+          (set! (.-_children node) (into-array Leaf new-children))
+          #_(doseq [i (range (alength children))]
+            (aset children i (get new-children i)))
+          (wrapped/miss cache node nil)
+          nil))
       (store [node children]
         (let [children-as-maps (mapv (fn [n] (-to-map n)) children)
-              address (uuid)]
-          (wrapped/miss cache node children)
+              address          (uuid)]
+          (wrapped/miss cache node nil)
           #_(println "storing " address)
           (async/<!! (k/assoc fs-store address children-as-maps))
           address))))
@@ -231,6 +252,10 @@
   ;; playground
   (.-_address (.-_root mem-set))
 
-  (.-_children (.-_root mem-set))
+  (seq (.-_children (.-_root mem-set)))
+
+  (.-_isLoaded (.-_root mem-set))
+
+  (.set (.-_isLoaded (.-_root mem-set)) false)
 
   )

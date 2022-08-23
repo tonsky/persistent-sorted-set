@@ -58,7 +58,7 @@
       (let [s (into (set/sorted-set) (shuffle (irange 0 5000)))]
         (are [from to expected] (= expected (set/slice s from to))
           nil    nil    (irange 0 5000)
-          
+
           -1     nil    (irange 0 5000)
           0      nil    (irange 0 5000)
           0.5    nil    (irange 1 5000)
@@ -90,7 +90,7 @@
       (let [s (into (set/sorted-set) (shuffle (irange 0 10)))]
         (are [from to expected] (= expected (set/slice s from to))
           nil  nil  (irange 0 10)
-          
+
           -1   nil  (irange 0 10)
           0    nil  (irange 0 10)
           0.5  nil  (irange 1 10)
@@ -99,7 +99,7 @@
           9.5  nil  [10]
           10   nil  [10]
           10.5 nil  nil
-          
+
           nil -1   nil
           nil 0    [0]
           nil 0.5  [0]
@@ -122,7 +122,7 @@
       (let [s (into (set/sorted-set) (shuffle (irange 0 5000)))]
         (are [from to expected] (= expected (set/rslice s from to))
           nil    nil    (irange 5000 0)
-          
+
           5001   nil    (irange 5000 0)
           5000   nil    (irange 5000 0)
           4999.5 nil    (irange 4999 0)
@@ -131,7 +131,7 @@
           0.5    nil    [0]
           0      nil    [0]
           -1     nil    nil
-          
+
           nil    5001   nil
           nil    5000   [5000]
           nil    4999.5 [5000]
@@ -154,7 +154,7 @@
       (let [s (into (set/sorted-set) (shuffle (irange 0 10)))]
         (are [from to expected] (= expected (set/rslice s from to))
           nil nil (irange 10 0)
-          
+
           11  nil (irange 10 0)
           10  nil (irange 10 0)
           9.5 nil (irange 9 0)
@@ -163,7 +163,7 @@
           0.5 nil [0]
           0   nil [0]
           -1  nil nil
-          
+
           nil 11  nil
           nil 10  [10]
           nil 9.5 [10]
@@ -190,18 +190,18 @@
           2500   nil
           5000   nil
           5001   nil
-          
+
           nil    -1
-          nil    0     
-          nil    1     
+          nil    0
+          nil    1
           nil    2500
           nil    5000
-          nil    5001  
-          
+          nil    5001
+
           nil    nil
- 
+
           -1     5001
-          0      5000  
+          0      5000
           1      4999
           2500   2500
           2500.1 2500.9)))
@@ -214,20 +214,20 @@
           2500   nil
           5000   nil
           5001   nil
-          
+
           nil    -1
-          nil    0     
-          nil    1     
+          nil    0
+          nil    1
           nil    2500
           nil    5000
-          nil    5001  
-          
+          nil    5001
+
           nil    nil
 
-          5001   -1    
-          5000   0       
-          4999   1     
-          2500   2500  
+          5001   -1
+          5000   0
+          4999   1
+          2500   2500
           2500.9 2500.1)))
 
     (testing "Slice with equal elements"
@@ -352,7 +352,7 @@
                (count xs) "adds" (str "(" (count xs-sorted) " distinct),")
                (count rm) "removals" (str "(down to " (count xs-rm) ")"))
       (doseq [[method set0] [["conj" (into (set/sorted-set) xs)]
-                             ["bulk" (apply set/sorted-set xs)]]
+                             ["bulk" (apply set/sorted-set set/null-storage xs)]]
               :let [set1 (reduce disj set0 rm)
                     set2 (reduce disj set0 full-rm)]]
         (testing method
@@ -391,4 +391,3 @@
           (is (= (vec (rseq (rseq set-range))) expected))
           )))
 #_(println "[ OK ] btset slice checked"))
-

@@ -1,18 +1,24 @@
 package me.tonsky.persistent_sorted_set;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Node extends Leaf {
-  public Leaf[] _children; // make final again? perf. impact?
-  public Boolean _isLoaded = false;
-  public UUID _address;
+  public volatile Leaf[] _children;
+  public AtomicBoolean _isLoaded = new AtomicBoolean(false);
+  public volatile UUID _address;
+  public final ReentrantReadWriteLock _readWriteLock = new ReentrantReadWriteLock();
+  public final Lock _read  = _readWriteLock.readLock();
+  public final Lock _write = _readWriteLock.writeLock();
 
   public Node(StorageBackend storage, Object[] keys, Leaf[] children, int len, Edit edit) {
     super(storage, keys, len, edit);
     _children = children;
-    _isLoaded = true;
+    _isLoaded.set(true);
     _address = null;
   }
 
@@ -24,14 +30,13 @@ public class Node extends Leaf {
     public Node(StorageBackend storage, Object[] keys, int len, Edit edit, UUID address) {
       super(storage, keys, len, edit);
       _address = address;
+      _children = new Leaf[len];
     }
 
     void ensureChildren() {
-      if (!_isLoaded) {
-        synchronized(this) {
-          _children = _storage.load(this);
-          _isLoaded = true;
-        }
+      if (!_isLoaded.get()) {
+        _storage.load(this);
+        _isLoaded.set(true);
       } else {
         _storage.hitCache(this);
       }
@@ -42,8 +47,13 @@ public class Node extends Leaf {
     if (idx >= 0) return true;
     int ins = -idx-1;
     if (ins == _len) return false;
+    _write.lock();
     ensureChildren();
-    return _children[ins].contains(key, cmp);
+    _read.lock();
+    _write.unlock();
+    boolean contained = _children[ins].contains(key, cmp);
+    _read.unlock();
+    return contained;
   }
 
   Leaf[] add(Object key, Comparator cmp, Edit edit) {
@@ -53,14 +63,21 @@ public class Node extends Leaf {
 
     int ins = -idx-1;
     if (ins == _len) ins = _len-1;
+    _write.lock();
     ensureChildren();
+    _read.lock();
+    _write.unlock();
     Leaf[] nodes = _children[ins].add(key, cmp, edit);
 
-    if (PersistentSortedSet.UNCHANGED == nodes) // child signalling already in set
+    if (PersistentSortedSet.UNCHANGED == nodes) { // child signalling already in set
+      _read.unlock();
       return PersistentSortedSet.UNCHANGED;
+    }
 
-    if (PersistentSortedSet.EARLY_EXIT == nodes) // child signalling nothing to update
+    if (PersistentSortedSet.EARLY_EXIT == nodes) { // child signalling nothing to update
+      _read.unlock();
       return PersistentSortedSet.EARLY_EXIT;
+    }
 
     // same len
     if (1 == nodes.length) {
@@ -68,7 +85,9 @@ public class Node extends Leaf {
       if (_edit.editable()) {
         _keys[ins] = node.maxKey();
         _children[ins] = node;
-        return ins==_len-1 && node.maxKey() == maxKey() ? new Leaf[]{this} : PersistentSortedSet.EARLY_EXIT;
+        Leaf[] added = ins==_len-1 && node.maxKey() == maxKey() ? new Leaf[]{this} : PersistentSortedSet.EARLY_EXIT;
+        _read.unlock();
+        return added;
       }
 
       Object[] newKeys;
@@ -87,7 +106,9 @@ public class Node extends Leaf {
         newChildren[ins] = node;
       }
 
-      return new Leaf[]{new Node(_storage, newKeys, newChildren, _len, edit)};
+      Leaf[] added = new Leaf[]{new Node(_storage, newKeys, newChildren, _len, edit)};
+      _read.unlock();
+      return added;
     }
 
     // len + 1
@@ -104,7 +125,9 @@ public class Node extends Leaf {
         .copyOne(nodes[0])
         .copyOne(nodes[1])
         .copyAll(_children, ins+1, _len);
-      return new Leaf[]{n};
+      Leaf [] added = new Leaf[]{n};
+      _read.unlock();
+      return added;
     }
 
     // split
@@ -131,8 +154,10 @@ public class Node extends Leaf {
         .copyAll(_children, ins+1, half1-1);
       Leaf children2[] = new Leaf[half2];
       ArrayUtil.copy(_children, half1-1, _len, children2, 0);
-      return new Leaf[]{new Node(_storage, keys1, children1, half1, edit),
+      Leaf[] added = new Leaf[]{new Node(_storage, keys1, children1, half1, edit),
           new Node(_storage, keys2, children2, half2, edit)};
+      _read.unlock();
+      return added;
     }
 
     // add to second half
@@ -155,8 +180,10 @@ public class Node extends Leaf {
       .copyOne(nodes[0])
       .copyOne(nodes[1])
       .copyAll(_children, ins+1, _len);
-    return new Leaf[]{new Node(_storage, keys1, children1, half1, edit),
+    Leaf[] added = new Leaf[]{new Node(_storage, keys1, children1, half1, edit),
         new Node(_storage, keys2, children2, half2, edit)};
+    _read.unlock();
+    return added;
   }
 
   Leaf[] remove(Object key, Leaf left, Leaf right, Comparator cmp, Edit edit) {
@@ -170,16 +197,23 @@ public class Node extends Leaf {
     if (idx == _len) // not in set
       return PersistentSortedSet.UNCHANGED;
 
+    _write.lock();
     ensureChildren();
+    _read.lock();
+    _write.unlock();
     Leaf leftChild  = idx > 0      ? _children[idx-1] : null,
          rightChild = idx < _len-1 ? _children[idx+1] : null;
     Leaf[] nodes = _children[idx].remove(key, leftChild, rightChild, cmp, edit);
 
-    if (PersistentSortedSet.UNCHANGED == nodes) // child signalling element not in set
+    if (PersistentSortedSet.UNCHANGED == nodes) { // child signalling element not in set
+      _read.unlock();
       return PersistentSortedSet.UNCHANGED;
+    }
 
-    if (PersistentSortedSet.EARLY_EXIT == nodes) // child signalling nothing to update
+    if (PersistentSortedSet.EARLY_EXIT == nodes) { // child signalling nothing to update
+      _read.unlock();
       return PersistentSortedSet.EARLY_EXIT;
+    }
 
     // nodes[1] always not nil
     int newLen = _len - 1
@@ -208,6 +242,7 @@ public class Node extends Leaf {
           cs.copyAll(_children, idx+2, _len);
 
         _len = newLen;
+        _read.unlock();
         return PersistentSortedSet.EARLY_EXIT;
       }
 
@@ -227,7 +262,9 @@ public class Node extends Leaf {
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children, idx+2, _len);
 
-      return new Leaf[] { left, newCenter, right };
+      Leaf[] removed = new Leaf[] { left, newCenter, right };
+      _read.unlock();
+      return removed;
     }
 
     // can join with left
@@ -243,14 +280,21 @@ public class Node extends Leaf {
       ks.copyAll(_keys,     idx+2, _len);
 
       Stitch<Leaf> cs = new Stitch(join._children, 0);
+      left._write.lock();
+      left.ensureChildren();
+      left._read.lock();
+      left._write.unlock();
       cs.copyAll(left._children, 0, left._len);
+      left._read.unlock();
       cs.copyAll(_children,      0, idx-1);
       if (nodes[0] != null) cs.copyOne(nodes[0]);
                             cs.copyOne(nodes[1]);
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children, idx+2, _len);
 
-      return new Leaf[] { null, join, right };
+      Leaf[] removed = new Leaf[] { null, join, right };
+      _read.unlock();
+      return removed;
     }
 
     // can join with right
@@ -271,9 +315,16 @@ public class Node extends Leaf {
                             cs.copyOne(nodes[1]);
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children,     idx+2, _len);
+      right._write.lock();
+      right.ensureChildren();
+      right._read.lock();
+      right._write.unlock();
       cs.copyAll(right._children, 0, right._len);
+      right._read.unlock();
 
-      return new Leaf[] { left, join, null };
+      Leaf[] removed = new Leaf[] { left, join, null };
+      _read.unlock();
+      return removed;
     }
 
     // borrow from left
@@ -295,17 +346,24 @@ public class Node extends Leaf {
       if (nodes[2] != null) ks.copyOne(nodes[2].maxKey());
       ks.copyAll(_keys, idx+2, _len);
 
+      left._write.lock();
+      left.ensureChildren();
+      left._read.lock();
+      left._write.unlock();
       ArrayUtil.copy(left._children, 0, newLeftLen, newLeft._children, 0);
 
       Stitch<Leaf> cs = new Stitch(newCenter._children, 0);
       cs.copyAll(left._children, newLeftLen, left._len);
+      left._read.unlock();
       cs.copyAll(_children, 0, idx-1);
       if (nodes[0] != null) cs.copyOne(nodes[0]);
                             cs.copyOne(nodes[1]);
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children, idx+2, _len);
 
-      return new Leaf[] { newLeft, newCenter, right };
+      Leaf[] removed = new Leaf[] { newLeft, newCenter, right };
+      _read.unlock();
+      return removed;
     }
 
     // borrow from right
@@ -334,11 +392,18 @@ public class Node extends Leaf {
                             cs.copyOne(nodes[1]);
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children, idx+2, _len);
+      right._write.lock();
+      right.ensureChildren();
+      right._read.lock();
+      right._write.unlock();
       cs.copyAll(right._children, 0, rightHead);
 
       ArrayUtil.copy(right._children, rightHead, right._len, newRight._children, 0);
+      right._read.unlock();
 
-      return new Leaf[] { left, newCenter, newRight };
+      Leaf[] removed = new Leaf[] { left, newCenter, newRight };
+      _read.unlock();
+      return removed;
     }
 
     throw new RuntimeException("Unreachable");
@@ -346,17 +411,20 @@ public class Node extends Leaf {
 
   public String str(int lvl) {
     StringBuilder sb = new StringBuilder();
+    _read.lock();
     for (int i=0; i < _len; ++i) {
       sb.append("\n");
       for (int j=0; j < lvl; ++j)
         sb.append("| ");
       ensureChildren();
-      if (_isLoaded) {
+      if (_isLoaded.get()) {
         sb.append(_keys[i] + ": " + _children[i].str(lvl+1));
       } else {
         sb.append(_keys[i] + ": not loaded");
       }
     }
+    _read.unlock();
+
     sb.append(" address: ");
     sb.append(_address);
     return sb.toString();

@@ -1,6 +1,7 @@
 package me.tonsky.persistent_sorted_set;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
@@ -8,14 +9,13 @@ public class Leaf {
   public final Object[] _keys;
   public int _len;
   final Edit _edit;
-  public boolean _isDirty;
+  public final AtomicBoolean _isDirty = new AtomicBoolean(true);
   public final StorageBackend _storage;
 
   public Leaf(StorageBackend storage, Object[] keys, int len, Edit edit) {
     _keys = keys;
     _len  = len;
     _edit = edit;
-    _isDirty = true;
     _storage = storage;
   }
 
@@ -267,7 +267,7 @@ public class Leaf {
       sb.append(_keys[i].toString());
     }
     sb.append(" dirty: ");
-    sb.append(_isDirty);
+    sb.append(_isDirty.get());
     return sb.append("}").toString();
   }
 }

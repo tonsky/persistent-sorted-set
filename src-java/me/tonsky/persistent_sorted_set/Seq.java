@@ -34,8 +34,11 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
   Leaf child() {
     assert _node instanceof Node;
     Node n = ((Node) _node);
+    n._write.lock();
     n.ensureChildren();
-    return n._children[_idx];
+    Leaf child = n._children[_idx];
+    n._write.unlock();
+    return child;
   }
 
   boolean over() {
@@ -138,7 +141,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
 
   public ISeq chunkedMore() {
     Seq seq = chunkedNext();
-    if (seq == null) return PersistentList.EMPTY;
+    // if (seq == null) return PersistentList.EMPTY;
     return seq;
   }
 

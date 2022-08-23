@@ -11,7 +11,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
 
   public static int MIN_LEN = 32, MAX_LEN = 64, EXPAND_LEN = 8;
 
-  public static final PersistentSortedSet EMPTY = new PersistentSortedSet(null);
+    // public static final PersistentSortedSet EMPTY = new PersistentSortedSet(null);
 
   public static void setMaxLen(int maxLen) {
     MAX_LEN = maxLen;
@@ -22,7 +22,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   int _count;
   final Edit _edit;
   int _version = 0;
-  StorageBackend _storage;
+  public StorageBackend _storage;
 
   PersistentSortedSet(StorageBackend storage) { this(null, RT.DEFAULT_COMPARATOR, storage); }
   public PersistentSortedSet(Comparator cmp, StorageBackend storage) { this(null, cmp, storage); }
