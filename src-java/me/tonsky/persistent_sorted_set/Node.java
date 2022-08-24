@@ -33,7 +33,7 @@ public class Node extends Leaf {
       _children = new Leaf[len];
     }
 
-    void ensureChildren() {
+    public void ensureChildren() {
       if (!_isLoaded.get()) {
         _storage.load(this);
         _isLoaded.set(true);

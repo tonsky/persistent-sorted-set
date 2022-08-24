@@ -172,6 +172,27 @@
       (Node. storage (into-array Object keys) len (Edit. false) address)
       (Leaf. storage (into-array Object keys) len (Edit. false)))))
 
+(defn mark
+  "Return a set of all addresses reachable from gc-roots, corresponding to the
+  mark phase of a garbage collector."
+  ([gc-roots]
+   (loop [to-visit gc-roots
+          visited  #{}]
+     (if-let [to-visit (seq to-visit)]
+       (let [[^Leaf node & r]   to-visit
+             [children address] (when (= (type node) Node)
+                                  (.lock (.-_write node))
+                                  (.ensureChildren node)
+                                  (let [children (.-_children node)
+                                        address  (.-_address node)]
+                                    (.unlock (.-_write node))
+                                    [children address]))]
+         (if address ;; is written Node
+           (recur (into r children)
+                  (clojure.core/conj visited address))
+           (recur r visited)))
+       visited))))
+
 (comment
 
   (require '[konserve.core :as k]
@@ -235,6 +256,7 @@
   (set! (.-_root new-mem-set)
         (-flush (.-_root new-mem-set)))
 
+  (mark #{(.-_root new-mem-set)})
 
 
   ;; 3. access tree by printing and test loading from storage
