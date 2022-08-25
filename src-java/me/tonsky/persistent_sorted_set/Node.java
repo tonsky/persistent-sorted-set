@@ -5,18 +5,26 @@ import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Node extends Leaf {
-  final Leaf[] _children;
+  public final Leaf[] _children;
+  public int _count;
   
   public Node(Object[] keys, Leaf[] children, int len, Edit edit) {
     super(keys, len, edit);
     _children = children;
+    updateCount();
   }
 
-  Node newNode(int len, Edit edit) {
-    return new Node(new Object[len], new Leaf[len], len, edit);
+  public Node(Object[] keys, Leaf[] children, int len, int count, Edit edit) {
+    super(keys, len, edit);
+    _children = children;
+    _count = count;
   }
 
-  boolean contains(Object key, Comparator cmp) {
+  public Node newNode(int len, int count, Edit edit) {
+    return new Node(new Object[len], new Leaf[len], len, count, edit);
+  }
+
+  public boolean contains(Object key, Comparator cmp) {
     int idx = search(key, cmp);
     if (idx >= 0) return true;
     int ins = -idx-1; 
@@ -24,7 +32,7 @@ public class Node extends Leaf {
     return _children[ins].contains(key, cmp);
   }
 
-  Leaf[] add(Object key, Comparator cmp, Edit edit) {
+  public Leaf[] add(Object key, Comparator cmp, Edit edit) {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
@@ -36,8 +44,10 @@ public class Node extends Leaf {
     if (PersistentSortedSet.UNCHANGED == nodes) // child signalling already in set
       return PersistentSortedSet.UNCHANGED;
 
-    if (PersistentSortedSet.EARLY_EXIT == nodes) // child signalling nothing to update
+    if (PersistentSortedSet.EARLY_EXIT == nodes) { // child signalling nothing to update
+      _count += 1;
       return PersistentSortedSet.EARLY_EXIT;
+    }
     
     // same len
     if (1 == nodes.length) {
@@ -45,7 +55,8 @@ public class Node extends Leaf {
       if (_edit.editable()) {
         _keys[ins] = node.maxKey();
         _children[ins] = node;
-        return ins==_len-1 && node.maxKey() == maxKey() ? new Leaf[]{this} : PersistentSortedSet.EARLY_EXIT;
+        _count += 1;
+        return ins == _len - 1 && node.maxKey() == maxKey() ? new Leaf[]{this} : PersistentSortedSet.EARLY_EXIT; // TODO why maxKey check?
       }
 
       Object[] newKeys;
@@ -64,12 +75,12 @@ public class Node extends Leaf {
         newChildren[ins] = node;
       }
 
-      return new Leaf[]{new Node(newKeys, newChildren, _len, edit)};
+      return new Leaf[]{new Node(newKeys, newChildren, _len, _count + 1, edit)};
     }
 
     // len + 1
     if (_len < PersistentSortedSet.MAX_LEN) {
-      Node n = newNode(_len+1, edit);
+      Node n = newNode(_len + 1, _count + 1, edit);
       new Stitch(n._keys, 0)
         .copyAll(_keys, 0, ins)
         .copyOne(nodes[0].maxKey())
@@ -91,30 +102,30 @@ public class Node extends Leaf {
 
     // add to first half
     if (ins < half1) {
-      Object keys1[] = new Object[half1];
+      Object[] keys1 = new Object[half1];
       new Stitch(keys1, 0)
         .copyAll(_keys, 0, ins)
         .copyOne(nodes[0].maxKey())
         .copyOne(nodes[1].maxKey())
         .copyAll(_keys, ins+1, half1-1);
-      Object keys2[] = new Object[half2];
+      Object[] keys2 = new Object[half2];
       ArrayUtil.copy(_keys, half1-1, _len, keys2, 0);
 
-      Leaf children1[] = new Leaf[half1];
+      Leaf[] children1 = new Leaf[half1];
       new Stitch(children1, 0)
         .copyAll(_children, 0, ins)
         .copyOne(nodes[0])
         .copyOne(nodes[1])
         .copyAll(_children, ins+1, half1-1);
-      Leaf children2[] = new Leaf[half2];
+      Leaf[] children2 = new Leaf[half2];
       ArrayUtil.copy(_children, half1-1, _len, children2, 0);
       return new Leaf[]{new Node(keys1, children1, half1, edit),
                         new Node(keys2, children2, half2, edit)};
     }
 
     // add to second half
-    Object keys1[] = new Object[half1],
-           keys2[] = new Object[half2];
+    Object[] keys1 = new Object[half1],
+             keys2 = new Object[half2];
     ArrayUtil.copy(_keys, 0, half1, keys1, 0);
 
     new Stitch(keys2, 0)
@@ -136,11 +147,11 @@ public class Node extends Leaf {
                       new Node(keys2, children2, half2, edit)};
   }
 
-  Leaf[] remove(Object key, Leaf left, Leaf right, Comparator cmp, Edit edit) {
+  public Leaf[] remove(Object key, Leaf left, Leaf right, Comparator cmp, Edit edit) {
     return remove(key, (Node) left, (Node) right, cmp, edit);
   }
 
-  Leaf[] remove(Object key, Node left, Node right, Comparator cmp, Edit edit) {
+  public Leaf[] remove(Object key, Node left, Node right, Comparator cmp, Edit edit) {
     int idx = search(key, cmp);
     if (idx < 0) idx = -idx-1;
 
@@ -154,8 +165,10 @@ public class Node extends Leaf {
     if (PersistentSortedSet.UNCHANGED == nodes) // child signalling element not in set
       return PersistentSortedSet.UNCHANGED;
 
-    if (PersistentSortedSet.EARLY_EXIT == nodes) // child signalling nothing to update
+    if (PersistentSortedSet.EARLY_EXIT == nodes) { // child signalling nothing to update
+      _count -= 1;
       return PersistentSortedSet.EARLY_EXIT;
+    }
 
     // nodes[1] always not nil
     int newLen = _len - 1
@@ -184,10 +197,11 @@ public class Node extends Leaf {
           cs.copyAll(_children, idx+2, _len);
 
         _len = newLen;
+        _count -= 1;
         return PersistentSortedSet.EARLY_EXIT;
       }
 
-      Node newCenter = newNode(newLen, edit);
+      Node newCenter = newNode(newLen, _count - 1, edit);
 
       Stitch<Object> ks = new Stitch(newCenter._keys, 0);
       ks.copyAll(_keys, 0, idx-1);
@@ -208,7 +222,7 @@ public class Node extends Leaf {
 
     // can join with left
     if (left != null && left._len + newLen <= PersistentSortedSet.MAX_LEN) {
-      Node join = newNode(left._len + newLen, edit);
+      Node join = newNode(left._len + newLen, left._count + _count - 1, edit);
 
       Stitch<Object> ks = new Stitch(join._keys, 0);
       ks.copyAll(left._keys, 0, left._len);
@@ -231,7 +245,7 @@ public class Node extends Leaf {
 
     // can join with right
     if (right != null && newLen + right._len <= PersistentSortedSet.MAX_LEN) {
-      Node join = newNode(newLen + right._len, edit);
+      Node join = newNode(newLen + right._len, _count + right._count - 1, edit);
 
       Stitch<Object> ks = new Stitch(join._keys, 0);
       ks.copyAll(_keys, 0, idx-1);
@@ -258,8 +272,8 @@ public class Node extends Leaf {
           newLeftLen   = totalLen >>> 1,
           newCenterLen = totalLen - newLeftLen;
 
-      Node newLeft   = newNode(newLeftLen,   edit),
-           newCenter = newNode(newCenterLen, edit);
+      Node newLeft   = newNode(newLeftLen,   -1, edit),
+           newCenter = newNode(newCenterLen, -1, edit);
 
       ArrayUtil.copy(left._keys, 0, newLeftLen, newLeft._keys, 0);
 
@@ -280,6 +294,8 @@ public class Node extends Leaf {
                             cs.copyOne(nodes[1]);
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children, idx+2, _len);
+      newLeft.updateCount();
+      newCenter.updateCount();
 
       return new Leaf[] { newLeft, newCenter, right };
     }
@@ -291,8 +307,8 @@ public class Node extends Leaf {
           newRightLen  = totalLen - newCenterLen,
           rightHead    = right._len - newRightLen;
 
-      Node newCenter = newNode(newCenterLen, edit),
-           newRight  = newNode(newRightLen,  edit);
+      Node newCenter = newNode(newCenterLen, -1, edit),
+           newRight  = newNode(newRightLen,  -1, edit);
 
       Stitch<Object> ks = new Stitch(newCenter._keys, 0);
       ks.copyAll(_keys, 0, idx-1);
@@ -314,10 +330,26 @@ public class Node extends Leaf {
 
       ArrayUtil.copy(right._children, rightHead, right._len, newRight._children, 0);        
 
+      newCenter.updateCount();
+      newRight.updateCount();
+
       return new Leaf[] { left, newCenter, newRight };
     }
 
     throw new RuntimeException("Unreachable");
+  }
+
+  @Override
+  public int count() {
+    return _count;
+  }
+
+  public Node updateCount() {
+    _count = 0;
+    for (Leaf child: _children) {
+      _count += child.count();
+    }
+    return this;
   }
 
   public String str(int lvl) {

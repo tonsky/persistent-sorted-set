@@ -4,10 +4,10 @@ import java.util.*;
 import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
-public class Leaf {
-  final Object[] _keys;
-  int _len;
-  final Edit _edit;
+public class Leaf implements Counted {
+  public final Object[] _keys;
+  public int _len;
+  public final Edit _edit;
 
   public Leaf(Object[] keys, int len, Edit edit) {
     _keys = keys;
@@ -19,14 +19,14 @@ public class Leaf {
     return _keys[_len-1];
   }
 
-  Leaf newLeaf(int len, Edit edit) {
+  public Leaf newLeaf(int len, Edit edit) {
     if (edit.editable())
       return new Leaf(new Object[Math.min(PersistentSortedSet.MAX_LEN, len + PersistentSortedSet.EXPAND_LEN)], len, edit);
     else
       return new Leaf(new Object[len], len, edit);
   }
 
-  int search(Object key, Comparator cmp) {
+  public int search(Object key, Comparator cmp) {
     return Arrays.binarySearch(_keys, 0, _len, key, cmp);
 
     // int low = 0, high = _len;
@@ -47,7 +47,7 @@ public class Leaf {
     // return -high-1; // high
   }
 
-  int searchFirst(Object key, Comparator cmp) {
+  public int searchFirst(Object key, Comparator cmp) {
     int low = 0, high = _len;
     while (low < high) {
       int mid = (high + low) >>> 1;
@@ -60,7 +60,7 @@ public class Leaf {
     return low;
   }
 
-  int searchLast(Object key, Comparator cmp) {
+  public int searchLast(Object key, Comparator cmp) {
     int low = 0, high = _len;
     while (low < high) {
       int mid = (high + low) >>> 1;
@@ -73,11 +73,11 @@ public class Leaf {
     return low - 1;
   }
 
-  boolean contains(Object key, Comparator cmp) {
+  public boolean contains(Object key, Comparator cmp) {
     return search(key, cmp) >= 0;
   }
 
-  Leaf[] add(Object key, Comparator cmp, Edit edit) {
+  public Leaf[] add(Object key, Comparator cmp, Edit edit) {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
@@ -88,7 +88,7 @@ public class Leaf {
     if (_edit.editable() && _len < _keys.length) {
       if (ins == _len) {
         _keys[_len++] = key;
-        return new Leaf[]{this};
+        return new Leaf[]{this}; // maxKey needs updating
       } else {
         ArrayUtil.copy(_keys, ins, _len, _keys, ins+1);
         _keys[ins] = key;
@@ -134,7 +134,7 @@ public class Leaf {
     return new Leaf[]{n1, n2};
   }
 
-  Leaf[] remove(Object key, Leaf left, Leaf right, Comparator cmp, Edit edit) {
+  public Leaf[] remove(Object key, Leaf left, Leaf right, Comparator cmp, Edit edit) {
     int idx = search(key, cmp);
     if (idx < 0) // not in set
       return PersistentSortedSet.UNCHANGED;
@@ -254,6 +254,11 @@ public class Leaf {
       return new Leaf[]{ left, newCenter, newRight };
     }
     throw new RuntimeException("Unreachable");
+  }
+
+  @Override
+  public int count() {
+    return _len;
   }
 
   public String str(int lvl) {

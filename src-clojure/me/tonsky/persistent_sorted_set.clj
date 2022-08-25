@@ -6,19 +6,19 @@
     [me.tonsky.persistent-sorted-set.arrays :as arrays])
   (:import
     [java.util Comparator Arrays]
-    [me.tonsky.persistent_sorted_set PersistentSortedSet Leaf Node Edit ArrayUtil]))
+    [me.tonsky.persistent_sorted_set ArrayUtil Edit Leaf Node PersistentSortedSet Storage]))
 
 
 (defn conj
   "Analogue to [[clojure.core/conj]] but with comparator that overrides the one stored in set."
-  [set key cmp]
-  (.cons ^PersistentSortedSet set key cmp))
+  [^PersistentSortedSet set key ^Comparator cmp]
+  (.cons set key cmp))
 
 
 (defn disj
   "Analogue to [[clojure.core/disj]] with comparator that overrides the one stored in set."
-  [set key cmp]
-  (.disjoin ^PersistentSortedSet set key cmp))
+  [^PersistentSortedSet set key ^Comparator cmp]
+  (.disjoin set key cmp))
 
 
 (defn slice
@@ -26,10 +26,10 @@
    `(slice set from to)` returns iterator for all Xs where from <= X <= to.
    `(slice set from nil)` returns iterator for all Xs where X >= from.
    Optionally pass in comparator that will override the one that set uses. Supports efficient [[clojure.core/rseq]]."
-  ([set from to]
-    (.slice ^PersistentSortedSet set from to))
-  ([set from to cmp]
-    (.slice ^PersistentSortedSet set from to ^Comparator cmp)))
+  ([^PersistentSortedSet set from to]
+    (.slice set from to))
+  ([^PersistentSortedSet set from to ^Comparator cmp]
+    (.slice set from to cmp)))
 
 
 (defn rslice
@@ -37,10 +37,10 @@
    `(rslice set from to)` returns backwards iterator for all Xs where from <= X <= to.
    `(rslice set from nil)` returns backwards iterator for all Xs where X <= from.
    Optionally pass in comparator that will override the one that set uses. Supports efficient [[clojure.core/rseq]]."
-  ([set from to]
-    (.rslice ^PersistentSortedSet set from to))
-  ([set from to cmp]
-    (.rslice ^PersistentSortedSet set from to ^Comparator cmp)))
+  ([^PersistentSortedSet set from to]
+    (.rslice set from to))
+  ([^PersistentSortedSet set from to ^Comparator cmp]
+    (.rslice set from to cmp)))
 
 
 (defn- array-from-indexed [coll type from to]
@@ -75,9 +75,9 @@
 
 (defn from-sorted-array
   "Fast path to create a set if you already have a sorted array of elements on your hands."
-  ([cmp keys]
+  ([^Comparator cmp keys]
    (from-sorted-array cmp keys (arrays/alength keys)))
-  ([cmp keys len]
+  ([^Comparator cmp keys len]
    (let [max    PersistentSortedSet/MAX_LEN
          avg    (quot (+ PersistentSortedSet/MIN_LEN max) 2)
          edit   (Edit. false)
@@ -90,7 +90,7 @@
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
          0 (PersistentSortedSet. cmp)
-         1 (PersistentSortedSet. {} cmp (first nodes) len edit 0)
+         1 (PersistentSortedSet. {} cmp (first nodes) edit 0)
          (recur (mapv ->Node (split nodes (count nodes) Leaf avg max))))))))
 
 
