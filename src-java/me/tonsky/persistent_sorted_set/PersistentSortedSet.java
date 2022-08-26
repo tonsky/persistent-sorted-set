@@ -89,7 +89,8 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
 
     if (from == null) {
       while (true) {
-        int idx = node._len-1;
+        node.ensureLoaded(_storage);
+        int idx = node._len - 1;
         if (node instanceof Node) {
           seq = new Seq(null, this, seq, node, idx, null, null, false, _version);
           node = seq.child();

@@ -4,7 +4,7 @@
   :url "https://github.com/tonsky/persistent-sorted-set"
   
   :dependencies [
-    [org.clojure/clojure       "1.10.0"   :scope "provided"]
+    [org.clojure/clojure       "1.11.1"   :scope "provided"]
     [org.clojure/clojurescript "1.10.520" :scope "provided"]
   ]
   

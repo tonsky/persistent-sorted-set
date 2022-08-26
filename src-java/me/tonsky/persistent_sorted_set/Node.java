@@ -10,7 +10,7 @@ public class Node extends Leaf {
   public volatile boolean _isLoaded;
   public ReentrantLock _lock;
 
-  public Leaf[] _children;
+  public Leaf[] _children; // only valid [0 ... _len-1]
   public int _count;
 
   public Node(Object address, Edit edit) {
@@ -57,13 +57,18 @@ public class Node extends Leaf {
     }
   }
 
-  public Node onLoad(Object[] keys, Leaf[] children, int len, int count) {
+  public Node onLoad(Object[] keys, Leaf[] children, int count) {
     _keys = keys;
     _children = children;
-    _len = len;
+    _len = keys.length;
     _count = count;
     _isLoaded = true;
     return this;
+  }
+
+  public Leaf[] children(IStorage storage) {
+    ensureLoaded(storage);
+    return _children;
   }
 
   @Override

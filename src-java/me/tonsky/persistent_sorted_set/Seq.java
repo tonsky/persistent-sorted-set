@@ -24,6 +24,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
     _cmp    = cmp;
     _asc    = asc;
     _version = version;
+    _node.ensureLoaded(_set._storage);
   }
 
   void checkVersion() {
@@ -33,7 +34,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
 
   Leaf child() {
     assert _node instanceof Node;
-    return ((Node) _node)._children[_idx];
+    return ((Node) _node).children(_set._storage)[_idx];
   }
 
   boolean over() {
@@ -45,7 +46,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
   boolean advance() {
     checkVersion();
     if (_asc) {
-      if (_idx < _node._len-1) {
+      if (_idx < _node._len - 1) {
         _idx++;
         return !over();
       } else if (_parent != null) {
@@ -80,7 +81,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
   public Object first() {
     checkVersion();
     // assert !(_node instanceof Node);
-    return _node._keys[_idx];
+    return _node.keys(_set._storage)[_idx];
   }
 
   public Seq next() {

@@ -5,9 +5,15 @@ import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Leaf {
-  public Object[] _keys;
+  public Object[] _keys; // only valid [0 ... _len-1]
   public int _len;
   public final Edit _edit;
+
+  public Leaf(Object[] keys, Edit edit) {
+    _keys = keys;
+    _len  = keys.length;
+    _edit = edit;
+  }
 
   public Leaf(Object[] keys, int len, Edit edit) {
     _keys = keys;
@@ -16,6 +22,12 @@ public class Leaf {
   }
 
   public void ensureLoaded(IStorage storage) {
+    // nop
+  }
+
+  public Object[] keys(IStorage storage) {
+    ensureLoaded(storage);
+    return _keys;
   }
 
   public Object maxKey(IStorage storage) {

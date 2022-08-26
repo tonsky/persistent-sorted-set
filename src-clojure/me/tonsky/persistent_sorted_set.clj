@@ -1,13 +1,14 @@
 (ns ^{:author "Nikita Prokopov"
       :doc "A B-tree based persistent sorted set. Supports transients, custom comparators, fast iteration, efficient slices (iterator over a part of the set) and reverse slices. Almost a drop-in replacement for [[clojure.core/sorted-set]], the only difference being this one can’t store nil."}
   me.tonsky.persistent-sorted-set
-  (:refer-clojure :exclude [conj disj sorted-set sorted-set-by])
+  (:refer-clojure :exclude [conj disj load sorted-set sorted-set-by])
   (:require
     [me.tonsky.persistent-sorted-set.arrays :as arrays])
   (:import
     [java.util Comparator Arrays]
     [me.tonsky.persistent_sorted_set ArrayUtil Edit IStorage Leaf Node PersistentSortedSet]))
 
+(set! *warn-on-reflection* true)
 
 (defn conj
   "Analogue to [[clojure.core/conj]] but with comparator that overrides the one stored in set."
@@ -113,3 +114,10 @@
   "Create a set with default comparator."
   ([] (PersistentSortedSet/EMPTY))
   ([& keys] (from-sequential compare keys)))
+
+
+(defn load [^Comparator cmp ^IStorage storage address]
+  (let [edit (Edit. false)
+        root (Node. address edit)]
+    (.load storage root)
+    (PersistentSortedSet. nil cmp storage root edit 0)))
