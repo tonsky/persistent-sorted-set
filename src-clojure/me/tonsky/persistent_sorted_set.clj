@@ -6,7 +6,7 @@
     [me.tonsky.persistent-sorted-set.arrays :as arrays])
   (:import
     [java.util Comparator Arrays]
-    [me.tonsky.persistent_sorted_set ArrayUtil Edit Leaf Node PersistentSortedSet Storage]))
+    [me.tonsky.persistent_sorted_set ArrayUtil Edit IStorage Leaf Node PersistentSortedSet]))
 
 
 (defn conj
@@ -85,12 +85,12 @@
                   (Leaf. keys (count keys) edit))
          ->Node (fn [children]
                   (Node.
-                    (arrays/amap #(.maxKey ^Leaf %) Object children)
+                    (arrays/amap #(.maxKey ^Leaf % nil) Object children)
                     children (count children) edit))]
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
          0 (PersistentSortedSet. cmp)
-         1 (PersistentSortedSet. {} cmp (first nodes) edit 0)
+         1 (PersistentSortedSet. {} cmp nil (first nodes) edit 0)
          (recur (mapv ->Node (split nodes (count nodes) Leaf avg max))))))))
 
 

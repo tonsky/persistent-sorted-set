@@ -4,8 +4,8 @@ import java.util.*;
 import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
-public class Leaf implements Counted {
-  public final Object[] _keys;
+public class Leaf {
+  public Object[] _keys;
   public int _len;
   public final Edit _edit;
 
@@ -15,7 +15,11 @@ public class Leaf implements Counted {
     _edit = edit;
   }
 
-  public Object maxKey() {
+  public void ensureLoaded(IStorage storage) {
+  }
+
+  public Object maxKey(IStorage storage) {
+    ensureLoaded(storage);
     return _keys[_len-1];
   }
 
@@ -26,7 +30,8 @@ public class Leaf implements Counted {
       return new Leaf(new Object[len], len, edit);
   }
 
-  public int search(Object key, Comparator cmp) {
+  public int search(IStorage storage, Object key, Comparator cmp) {
+    ensureLoaded(storage);
     return Arrays.binarySearch(_keys, 0, _len, key, cmp);
 
     // int low = 0, high = _len;
@@ -47,7 +52,8 @@ public class Leaf implements Counted {
     // return -high-1; // high
   }
 
-  public int searchFirst(Object key, Comparator cmp) {
+  public int searchFirst(IStorage storage, Object key, Comparator cmp) {
+    ensureLoaded(storage);
     int low = 0, high = _len;
     while (low < high) {
       int mid = (high + low) >>> 1;
@@ -60,7 +66,8 @@ public class Leaf implements Counted {
     return low;
   }
 
-  public int searchLast(Object key, Comparator cmp) {
+  public int searchLast(IStorage storage, Object key, Comparator cmp) {
+    ensureLoaded(storage);
     int low = 0, high = _len;
     while (low < high) {
       int mid = (high + low) >>> 1;
@@ -73,12 +80,12 @@ public class Leaf implements Counted {
     return low - 1;
   }
 
-  public boolean contains(Object key, Comparator cmp) {
-    return search(key, cmp) >= 0;
+  public boolean contains(IStorage storage, Object key, Comparator cmp) {
+    return search(storage, key, cmp) >= 0;
   }
 
-  public Leaf[] add(Object key, Comparator cmp, Edit edit) {
-    int idx = search(key, cmp);
+  public Leaf[] add(IStorage storage, Object key, Comparator cmp, Edit edit) {
+    int idx = search(storage, key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
     
@@ -134,8 +141,8 @@ public class Leaf implements Counted {
     return new Leaf[]{n1, n2};
   }
 
-  public Leaf[] remove(Object key, Leaf left, Leaf right, Comparator cmp, Edit edit) {
-    int idx = search(key, cmp);
+  public Leaf[] remove(IStorage storage, Object key, Leaf left, Leaf right, Comparator cmp, Edit edit) {
+    int idx = search(storage, key, cmp);
     if (idx < 0) // not in set
       return PersistentSortedSet.UNCHANGED;
 
@@ -256,12 +263,13 @@ public class Leaf implements Counted {
     throw new RuntimeException("Unreachable");
   }
 
-  @Override
-  public int count() {
+  public int count(IStorage storage) {
+    // ensureLoaded(storage);
     return _len;
   }
 
-  public String str(int lvl) {
+  public String str(IStorage storage, int lvl) {
+    // ensureLoaded(storage);
     StringBuilder sb = new StringBuilder("{");
     for (int i = 0; i < _len; ++i) {
       if (i > 0) sb.append(" ");
