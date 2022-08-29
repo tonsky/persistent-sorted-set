@@ -121,3 +121,37 @@
         root (Node. address edit)]
     (.load storage root)
     (PersistentSortedSet. nil cmp storage root edit 0)))
+
+(defn stats [^PersistentSortedSet set]
+  (let [root          (.-_root set)
+        leaf?         #(not (instance? Node %))
+        loaded?       #(.-_isLoaded ^Leaf %)
+        loaded-ratio  (fn loaded-ratio [^Leaf leaf]
+                        (cond
+                          (leaf? leaf)         1
+                          (not (loaded? leaf)) 0
+                          :else
+                          (let [node     ^Node leaf
+                                len      (.-_len node)
+                                children (take len (.-_children node))]
+                            (/
+                              (->> children
+                                (map loaded-ratio)
+                                (reduce + 0))
+                              len))))
+        durable-ratio (fn durable-ratio [^Leaf leaf]
+                        (cond
+                          (not (loaded? leaf))      1
+                          (some? (.-_address leaf)) 1
+                          (leaf? leaf)              0
+                          :else
+                          (let [node     ^Node leaf
+                                len      (.-_len node)
+                                children (take len (.-_children node))]
+                            (/
+                              (->> children
+                                (map durable-ratio)
+                                (reduce + 0))
+                              len))))]
+    {:loaded-ratio  (double (loaded-ratio root))
+     :durable-ratio (double (durable-ratio root))}))

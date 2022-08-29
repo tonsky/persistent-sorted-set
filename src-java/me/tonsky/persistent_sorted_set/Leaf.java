@@ -1,10 +1,15 @@
 package me.tonsky.persistent_sorted_set;
 
 import java.util.*;
+import java.util.concurrent.locks.*;
 import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Leaf {
+  public volatile Object _address = null;
+  public volatile boolean _isLoaded = true;
+  public ReentrantLock _lock = null;
+
   public Object[] _keys; // only valid [0 ... _len-1]
   public int _len;
   public final Edit _edit;

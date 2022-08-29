@@ -6,10 +6,6 @@ import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Node extends Leaf {
-  public volatile Object _address;
-  public volatile boolean _isLoaded;
-  public ReentrantLock _lock;
-
   public Leaf[] _children; // only valid [0 ... _len-1]
   public int _count;
 
