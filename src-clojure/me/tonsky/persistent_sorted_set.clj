@@ -6,6 +6,7 @@
     [me.tonsky.persistent-sorted-set.arrays :as arrays])
   (:import
     [java.util Comparator Arrays]
+    [java.util.concurrent.atomic AtomicBoolean]
     [me.tonsky.persistent_sorted_set ArrayUtil IStorage Node PersistentSortedSet]))
 
 (set! *warn-on-reflection* true)
@@ -87,15 +88,14 @@
                    (Node. keys (count keys) edit))
          ->Node  (fn [^"[Lme.tonsky.persistent_sorted_set.Node;" children]
                    (Node.
-                     storage
-                     ^objects (arrays/amap #(.maxKey ^Node % nil) Object children)
+                     ^objects (arrays/amap #(.maxKey ^Node % storage) Object children)
                      children
                      (count children)
                      edit))]
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
          0 (PersistentSortedSet. cmp)
-         1 (PersistentSortedSet. {} cmp nil (first nodes) edit 0)
+         1 (PersistentSortedSet. {} cmp storage (first nodes) len edit 0)
          (recur (mapv ->Node (split nodes (count nodes) Node avg max))))))))
 
 
@@ -123,7 +123,7 @@
 (defn load [^Comparator cmp ^IStorage storage address]
   (let [root (Node. address)]
     (.load storage root)
-    (PersistentSortedSet. nil cmp storage root nil 0)))
+    (PersistentSortedSet. nil cmp storage root -1 nil 0)))
 
 
 (defn stats [^PersistentSortedSet set]

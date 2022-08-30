@@ -20,24 +20,34 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   }
 
   public Node _root;
+  public int _count;
+  public int _version;
   public final AtomicBoolean _edit;
-  public int _version = 0;
-  public IStorage _storage;
+  public final IStorage _storage;
 
-  public PersistentSortedSet() { this(null, RT.DEFAULT_COMPARATOR); }
-  public PersistentSortedSet(Comparator cmp) { this(null, cmp); }
+  public PersistentSortedSet() {
+    this(null, RT.DEFAULT_COMPARATOR);
+  }
+  
+  public PersistentSortedSet(Comparator cmp) {
+    this(null, cmp);
+  }
+  
   public PersistentSortedSet(IPersistentMap meta, Comparator cmp) {
-    super(meta, cmp);
-    _edit = null;
-    _root  = new Node(new Object[]{}, 0, _edit);
+    this(meta, cmp, null, new Node(new Object[]{}, 0, null), 0, null, 0);
   }
 
-  public PersistentSortedSet(IPersistentMap meta, Comparator cmp, IStorage storage, Node root, AtomicBoolean edit, int version) {
+  public PersistentSortedSet(IPersistentMap meta, Comparator cmp, IStorage storage, Node root, int count, AtomicBoolean edit, int version) {
     super(meta, cmp);
-    _storage = storage;
-    _root  = root;
-    _edit  = edit;
+    _root    = root;
+    _count   = count;
     _version = version;
+    _edit    = edit;
+    _storage = storage;
+  }
+
+  private int alterCount(int delta) {
+    return _count < 0 ? _count : _count + delta;
   }
 
   public boolean editable() {
@@ -45,13 +55,17 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   }
 
   // IPersistentSortedSet
-  public Seq slice(Object from, Object to) { return slice(from, to, _cmp); }
+  public Seq slice(Object from, Object to) {
+    return slice(from, to, _cmp);
+  }
+
   public Seq slice(Object from, Object to, Comparator cmp) {
     assert from == null || to == null || cmp.compare(from, to) <= 0 : "From " + from + " after to " + to;
     Seq seq = null;
     Node node = _root;
 
-    if (_root.count(_storage) == 0) return null;
+    if (_root.len(_storage) == 0)
+      return null;
 
     if (from == null) {
       while (true) {
@@ -85,7 +99,8 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     Seq seq = null;
     Node node = _root;
 
-    if (_root.count(_storage) == 0) return null;
+    if (_root.len(_storage) == 0)
+      return null;
 
     if (from == null) {
       while (true) {
@@ -136,13 +151,17 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
 
   // IObj
   public PersistentSortedSet withMeta(IPersistentMap meta) {
-    if(_meta == meta) return this;
-    return new PersistentSortedSet(meta, _cmp, _storage, _root, _edit, _version);
+    if (_meta == meta)
+      return this;
+    return new PersistentSortedSet(meta, _cmp, _storage, _root, _count, _edit, _version);
   }
 
   // Counted
   public int count() {
-    return _root.count(_storage);
+    if (_count < 0)
+      _count = _root.count(_storage);
+    // assert _count == _root.count(_storage) : _count + " != " + _root.count(_storage);
+    return _count;
   }
 
   // Sorted
@@ -185,18 +204,19 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
         _root = nodes[0];
       if (2 == nodes.length) {
         Object[] keys = new Object[] { nodes[0].maxKey(_storage), nodes[1].maxKey(_storage) };
-        _root = new Node(_storage, keys, nodes, 2, _edit);
+        _root = new Node(keys, nodes, 2, _edit);
       }
-      _version++;
+      _count = alterCount(1);
+      _version += 1;
       return this;
     }
 
     if (1 == nodes.length)
-      return new PersistentSortedSet(_meta, _cmp, _storage, nodes[0], _edit, _version+1);
+      return new PersistentSortedSet(_meta, _cmp, _storage, nodes[0], alterCount(1), _edit, _version + 1);
     
     Object[] keys = new Object[] { nodes[0].maxKey(_storage), nodes[1].maxKey(_storage) };
-    Node newRoot = new Node(keys, nodes, 2, _root.count(_storage) + 1, _edit);
-    return new PersistentSortedSet(_meta, _cmp, _storage, newRoot, _edit, _version+1);
+    Node newRoot = new Node(keys, nodes, 2, _edit);
+    return new PersistentSortedSet(_meta, _cmp, _storage, newRoot, alterCount(1), _edit, _version + 1);
   }
 
   // IPersistentSet
@@ -208,22 +228,30 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     Node[] nodes = _root.remove(_storage, key, null, null, cmp, _edit);
 
     // not in set
-    if (UNCHANGED == nodes) return this;
+    if (UNCHANGED == nodes)
+      return this;
+
     // in place update
-    if (nodes == EARLY_EXIT) { _version++; return this; }
+    if (nodes == EARLY_EXIT) {
+      _count = alterCount(-1);
+      _version += 1;
+      return this;
+    }
+
     Node newRoot = nodes[1];
     if (editable()) {
       if (newRoot.branch(_storage) && newRoot._len == 1)
         newRoot = ((Node) newRoot)._children[0];
       _root = newRoot;
-      _version++;
+      _count = alterCount(-1);
+      _version += 1;
       return this;
     }
     if (newRoot.branch(_storage) && newRoot._len == 1) {
       newRoot = ((Node) newRoot)._children[0];
-      return new PersistentSortedSet(_meta, _cmp, _storage, newRoot, _edit, _version+1);
+      return new PersistentSortedSet(_meta, _cmp, _storage, newRoot, alterCount(-1), _edit, _version + 1);
     }
-    return new PersistentSortedSet(_meta, _cmp, _storage, newRoot, _edit, _version+1);
+    return new PersistentSortedSet(_meta, _cmp, _storage, newRoot, alterCount(-1), _edit, _version + 1);
   }
 
   public boolean contains(Object key) {
@@ -234,7 +262,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   public PersistentSortedSet asTransient() {
     if (editable())
       throw new IllegalStateException("Expected persistent set");
-    return new PersistentSortedSet(_meta, _cmp, _storage, _root, new AtomicBoolean(true), _version);
+    return new PersistentSortedSet(_meta, _cmp, _storage, _root, _count, new AtomicBoolean(true), _version);
   }
 
   // ITransientCollection

@@ -18,7 +18,6 @@ import clojure.lang.*;
  *   _keys        :: Object[]
  *   _keys.lenght >= _len
  *   _children    :: null
- *   _count       :: _len
  * 
  * Branch:
  * 
@@ -28,7 +27,6 @@ import clojure.lang.*;
  *   _keys[i]         == _children[i].maxKey()
  *   _children        :: Object[]
  *   _children.lenght == _keys.lenght >= _len
- *   _count           >  _len
  * 
  * When transient:
  * 
@@ -64,44 +62,45 @@ import clojure.lang.*;
  */
 @SuppressWarnings("unchecked")
 public class Node {
-  public volatile Object _address = null;
-
   // Only valid [0 ... _len-1]
-  public volatile Object[] _keys = null;
+  public volatile Object[] _keys;
 
-  // Optional, only in non-leafs
+  // Optional, only in branches
   // Only valid [0 ... _len-1]
-  public volatile Node[] _children = null;
+  public volatile Node[] _children;
 
-  public int _len = -1;
-  public int _count = -1;
+  public volatile int _len;
 
-  public AtomicBoolean _edit = null;
+  public volatile Object _address;
+
+  public final AtomicBoolean _edit;
 
   public Node(Object address) {
-    _address = address;
+    _keys     = null;
+    _children = null;
+    _len      = -1;
+    _address  = address;
+    _edit     = null;
   }
 
   public Node(Object[] keys, int len, AtomicBoolean edit) {
-    _keys  = keys;
-    _len   = len;
-    _count = len;
-    _edit  = edit;
-  }
+    assert keys.length >= len;
 
-  public Node(Object[] keys, Node[] children, int len, int count, AtomicBoolean edit) {
     _keys     = keys;
-    _children = children;
+    _children = null;
     _len      = len;
-    _count    = count;
+    _address  = null;
     _edit     = edit;
   }
 
-  public Node(IStorage storage, Object[] keys, Node[] children, int len, AtomicBoolean edit) {
+  public Node(Object[] keys, Node[] children, int len, AtomicBoolean edit) {
+    assert keys.length >= len;
+    assert children.length >= len;
+
     _keys     = keys;
     _children = children;
     _len      = len;
-    updateCount(storage);
+    _address  = null;
     _edit     = edit;
   }
 
@@ -125,24 +124,32 @@ public class Node {
 
     assert loaded();
     assert _len >= 0;
-    assert _children == null ? _count == _len : _count > _len;
   }
 
-  public void onLoad(Object[] keys, int len) {
+  public void onLoadLeaf(Object[] keys) {
+    onLoadLeaf(keys, keys.length);
+  }
+
+  public void onLoadLeaf(Object[] keys, int len) {
+    // TODO sync?
     assert keys.length >= len;
 
     _keys  = keys;
     _len   = len;
-    _count = len;
   }
 
-  public void onLoad(Object[] keys, Node[] children, int len, int count) {
+  public void onLoadBranch(Object[] keys, Node[] children) {
+    onLoadBranch(keys, children, keys.length);
+  }
+
+  public void onLoadBranch(Object[] keys, Node[] children, int len) {
+    // TODO sync?
     assert keys.length >= len;
+    assert children.length >= len;
 
     _keys     = keys;
     _children = children;
     _len      = len;
-    _count    = count;
   }
 
   // onPersist?
@@ -194,19 +201,22 @@ public class Node {
   }
 
   public int count(IStorage storage) {
-    ensureLoaded(storage);
-    return _count;
-  }
+    if (leaf(storage))
+      return _len;
 
-  private void updateCount(IStorage storage) {
-    _count = 0;
+    int count = 0;
     for (int i = 0; i < _len; ++i) {
-      _count += _children[i].count(storage);
+      count += _children[i].count(storage);
     }
+    return count;
   }
 
   public boolean editable() {
     return _edit != null && _edit.get();
+  }
+
+  private Node newBranch(int len, AtomicBoolean edit) {
+    return new Node(new Object[len], new Node[len], len, edit);
   }
 
   private Node newLeaf(int len, AtomicBoolean edit) {
@@ -214,14 +224,6 @@ public class Node {
       return new Node(new Object[Math.min(PersistentSortedSet.MAX_LEN, len + PersistentSortedSet.EXPAND_LEN)], len, edit);
     else
       return new Node(new Object[len], len, edit);
-  }
-
-  private Node newBranch(int len, int count, AtomicBoolean edit) {
-    return new Node(new Object[len], new Node[len], len, count, edit);
-  }
-
-  private Node newBranch(int len, AtomicBoolean edit) {
-    return new Node(new Object[len], new Node[len], len, -1, edit);
   }
 
   public int search(IStorage storage, Object key, Comparator cmp) {
@@ -242,9 +244,10 @@ public class Node {
     // for (int i = low; i < high; ++i) {
     //   int d = cmp.compare(_keys[i], key);
     //   if (d == 0) return i;
-    //   else if (d > 0) return -i-1; // i
+    //   else if (d > 0) return -i - 1; // i
     // }
-    // return -high-1; // high
+
+    // return -high - 1; // high
   }
 
   public int searchFirst(IStorage storage, Object key, Comparator cmp) {
@@ -318,7 +321,6 @@ public class Node {
       return PersistentSortedSet.UNCHANGED;
 
     if (PersistentSortedSet.EARLY_EXIT == nodes) { // child signalling nothing to update
-      _count += 1;
       return PersistentSortedSet.EARLY_EXIT;
     }
     
@@ -328,7 +330,6 @@ public class Node {
       if (editable()) {
         _keys[ins] = node.maxKey(storage);
         _children[ins] = node;
-        _count += 1;
         if (ins == _len - 1 && node.maxKey(storage) == maxKey(storage)) // TODO why maxKey check?
           return new Node[]{this}; // update maxKey
         else
@@ -351,12 +352,12 @@ public class Node {
         newChildren[ins] = node;
       }
 
-      return new Node[]{new Node(newKeys, newChildren, _len, _count + 1, edit)};
+      return new Node[]{new Node(newKeys, newChildren, _len, edit)};
     }
 
     // len + 1
     if (_len < PersistentSortedSet.MAX_LEN) {
-      Node n = newBranch(_len + 1, _count + 1, edit);
+      Node n = newBranch(_len + 1, edit);
       new Stitch(n._keys, 0)
         .copyAll(_keys, 0, ins)
         .copyOne(nodes[0].maxKey(storage))
@@ -395,8 +396,8 @@ public class Node {
         .copyAll(_children, ins + 1, half1 - 1);
       Node[] children2 = new Node[half2];
       ArrayUtil.copy(_children, half1 - 1, _len, children2, 0);
-      return new Node[]{new Node(storage, keys1, children1, half1, edit),
-                        new Node(storage, keys2, children2, half2, edit)};
+      return new Node[]{new Node(keys1, children1, half1, edit),
+                        new Node(keys2, children2, half2, edit)};
     }
 
     // add to second half
@@ -419,8 +420,8 @@ public class Node {
       .copyOne(nodes[0])
       .copyOne(nodes[1])
       .copyAll(_children, ins + 1, _len);
-    return new Node[]{new Node(storage, keys1, children1, half1, edit),
-                      new Node(storage, keys2, children2, half2, edit)};
+    return new Node[]{new Node(keys1, children1, half1, edit),
+                      new Node(keys2, children2, half2, edit)};
   }
 
   public Node[] addLeaf(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit) {
@@ -436,13 +437,11 @@ public class Node {
       if (ins == _len) {
         _keys[_len] = key;
         _len += 1;
-        _count += 1;
         return new Node[]{this}; // maxKey needs updating
       } else {
         ArrayUtil.copy(_keys, ins, _len, _keys, ins+1);
         _keys[ins] = key;
         _len += 1;
-        _count += 1;
         return PersistentSortedSet.EARLY_EXIT;
       }
     }
@@ -508,7 +507,6 @@ public class Node {
       return PersistentSortedSet.UNCHANGED;
 
     if (PersistentSortedSet.EARLY_EXIT == nodes) { // child signalling nothing to update
-      _count -= 1;
       return PersistentSortedSet.EARLY_EXIT;
     }
 
@@ -540,11 +538,10 @@ public class Node {
 
         _address = null;
         _len = newLen;
-        _count -= 1;
         return PersistentSortedSet.EARLY_EXIT;
       }
 
-      Node newCenter = newBranch(newLen, _count - 1, edit);
+      Node newCenter = newBranch(newLen, edit);
 
       Stitch<Object> ks = new Stitch(newCenter._keys, 0);
       ks.copyAll(_keys, 0, idx - 1);
@@ -568,7 +565,7 @@ public class Node {
 
     // can join with left
     if (left != null && left._len + newLen <= PersistentSortedSet.MAX_LEN) {
-      Node join = newBranch(left._len + newLen, left._count + _count - 1, edit);
+      Node join = newBranch(left._len + newLen, edit);
 
       Stitch<Object> ks = new Stitch(join._keys, 0);
       ks.copyAll(left._keys, 0, left._len);
@@ -594,7 +591,7 @@ public class Node {
 
     // can join with right
     if (right != null && newLen + right._len <= PersistentSortedSet.MAX_LEN) {
-      Node join = newBranch(newLen + right._len, _count + right._count - 1, edit);
+      Node join = newBranch(newLen + right._len, edit);
 
       Stitch<Object> ks = new Stitch(join._keys, 0);
       ks.copyAll(_keys, 0, idx - 1);
@@ -643,8 +640,6 @@ public class Node {
                             cs.copyOne(nodes[1]);
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children, idx + 2, _len);
-      newLeft.updateCount(storage);
-      newCenter.updateCount(storage);
 
       return new Node[] { newLeft, newCenter, right };
     }
@@ -679,9 +674,6 @@ public class Node {
 
       ArrayUtil.copy(right._children, rightHead, right._len, newRight._children, 0);        
 
-      newCenter.updateCount(storage);
-      newRight.updateCount(storage);
-
       return new Node[] { left, newCenter, newRight };
     }
 
@@ -703,7 +695,6 @@ public class Node {
         ArrayUtil.copy(_keys, idx + 1, _len, _keys, idx);
         _address = null;
         _len = newLen;
-        _count = newLen;
         if (idx == newLen) // removed last, need to signal new maxKey
           return new Node[]{left, this, right};
         return PersistentSortedSet.EARLY_EXIT;        
@@ -760,7 +751,6 @@ public class Node {
         ArrayUtil.copy(left._keys, newLeftLen, left._len, _keys, 0);
         _address = null;
         _len = newCenterLen;
-        _count = newCenterLen;
       } else {
         newCenter = newLeaf(newCenterLen, edit);
         new Stitch(newCenter._keys, 0)
@@ -774,7 +764,6 @@ public class Node {
         newLeft  = left;
         left._address = null;
         left._len = newLeftLen;
-        left._count = newLeftLen;
       } else {
         newLeft = newLeaf(newLeftLen, edit);
         ArrayUtil.copy(left._keys, 0, newLeftLen, newLeft._keys, 0);
@@ -800,7 +789,6 @@ public class Node {
           .copyAll(right._keys, 0,       rightHead);
         _address = null;
         _len = newCenterLen;
-        _count = newCenterLen;
       } else {
         newCenter = newLeaf(newCenterLen, edit);
         new Stitch(newCenter._keys, 0)
@@ -815,7 +803,6 @@ public class Node {
         ArrayUtil.copy(right._keys, rightHead, right._len, right._keys, 0);
         right._address = null;
         right._len = newRightLen;
-        right._count = newRightLen;
       } else {
         newRight = newLeaf(newRightLen, edit);
         ArrayUtil.copy(right._keys, rightHead, right._len, newRight._keys, 0);

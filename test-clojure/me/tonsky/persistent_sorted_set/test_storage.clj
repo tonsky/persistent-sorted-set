@@ -22,13 +22,11 @@
      [address (persistent! @*storage)]))
   ([*storage ^Node node depth]
    (let [address (str depth "-" (gen-addr))
-         count   (.count node nil)
          keys    (into [] (take (.len node nil) (.keys node nil)))]
      (swap! *storage assoc! address 
        (if (.leaf node nil)
          keys
          {:keys     keys
-          :count    count
           :children (->> (.children node nil)
                       (take (.len node nil))
                       (mapv #(persist *storage % (inc depth))))}))
@@ -38,16 +36,15 @@
   (reify IStorage
     (^void load [_ ^Node node]
       (let [address (.-_address node)
-            edit    nil
             ; _       (println "  loading" address)
             data    (storage address)]
         (if (vector? data)
           (let [keys (to-array data)]
-            (.onLoad node keys (alength keys)))
-          (let [{:keys [keys children count]} data
+            (.onLoadLeaf node keys))
+          (let [{:keys [keys children]} data
                 keys     (to-array keys)
                 children (into-array Node (map (fn [addr] (Node. addr)) children))]
-            (.onLoad node keys children (alength keys) count)))))))
+            (.onLoadBranch node keys children)))))))
 
 (defn lazy-load [original]
   (let [[address storage] (persist original)]
@@ -61,12 +58,7 @@
                    (disj 250000 500000))
         [address storage] (persist original)
         loaded   (set/load RT/DEFAULT_COMPARATOR (wrap-storage storage) address)
-        
-        ; count shouldn’t fetch anything but root
-        _       (is (= (count loaded) (count original)))
-        l0      (:loaded-ratio (set/stats loaded))
-        _       (is (= 0.0 l0))
-        
+                
         ; touch first 100
         _       (is (= (take 100 loaded) (take 100 original)))
         l100    (:loaded-ratio (set/stats loaded))
@@ -125,4 +117,9 @@
         loaded' (reduce disj loaded xs)
         _       (is (every? #(not (loaded' %)) xs))
         _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
+        
+        ; count fetches everything
+        _       (is (= (count loaded) (count original)))
+        l0      (:loaded-ratio (set/stats loaded))
+        _       (is (= 1.0 l0))
         ]))

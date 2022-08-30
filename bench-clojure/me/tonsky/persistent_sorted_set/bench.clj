@@ -1,17 +1,27 @@
 (ns me.tonsky.persistent-sorted-set.bench
   (:require
+    [clojure.edn :as edn]
+    [clojure.java.io :as io]
     [clj-async-profiler.core :as profiler]
     [criterium.core :as criterium]
     [me.tonsky.persistent-sorted-set :as set]))
 
+(when-not (.exists (io/file "bench-clojure/ints-10K.edn"))
+  (let [xs (vec (shuffle (range 10000)))]
+    (spit "bench-clojure/ints-10K.edn" (pr-str xs))))
+
 (def ints-10K
-  (vec (shuffle (range 10000))))
+  (edn/read-string (slurp "bench-clojure/ints-10K.edn")))
 
 (def set-10K
   (into (set/sorted-set) ints-10K))
 
+(when-not (.exists (io/file "bench-clojure/ints-300K.edn"))
+  (let [xs (vec (shuffle (range 300000)))]
+    (spit "bench-clojure/ints-300K.edn" (pr-str xs))))
+
 (def ints-300K
-  (vec (shuffle (range 300000))))
+  (edn/read-string (slurp "bench-clojure/ints-300K.edn")))
 
 (def set-300K
   (into (set/sorted-set) ints-300K))
@@ -49,10 +59,13 @@
   (let [fn            (resolve sym)
         _             (print (format "%-30s" (name sym)))
         _             (flush)
-        results       (criterium/quick-benchmark (fn) {})
+        results       (criterium/benchmark (fn) {})
         [mean & _]    (:mean results)
         [factor unit] (criterium/scale-time mean)]
-    (println (criterium/format-value mean factor unit))))
+    (println (criterium/format-value mean factor unit))
+    #_(profiler/profile
+      (dotimes [i 10000]
+        (fn)))))
 
 (defn -main []
   (bench `bench-conj-10K)
