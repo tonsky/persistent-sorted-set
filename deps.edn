@@ -6,4 +6,14 @@
   {:extra-deps
    {io.github.humbleui/humbleui {:git/sha "72dfe4906cdde227f6cebade96337fb311106ba0" :exclusions [io.github.humbleui/jwm]}
     nrepl/nrepl                 {:mvn/version "1.0.0"}}
-   :extra-paths ["test-clojure" "dev" "/Users/tonsky/ws/jwm/target/classes"]}}}
+   :extra-paths ["test-clojure" "dev" "/Users/tonsky/ws/jwm/target/classes"]}
+  :bench
+  {:extra-deps
+   {com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.0"}
+    criterium/criterium                      {:mvn/version "0.4.6"}}
+   :extra-paths ["bench-clojure"]
+   :jvm-opts ["-server"
+              "-Duser.language=en-US"
+              "-Djdk.attach.allowAttachSelf"
+              "-XX:+UnlockDiagnosticVMOptions"
+              "-XX:+DebugNonSafepoints"]}}}
