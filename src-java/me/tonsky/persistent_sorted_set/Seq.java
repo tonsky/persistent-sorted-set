@@ -7,14 +7,14 @@ import clojure.lang.*;
 class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
   final PersistentSortedSet _set;
   Seq  _parent;
-  Leaf _node;
+  Node _node;
   int  _idx;
   final Object _keyTo;
   final Comparator _cmp;
   final boolean _asc;
   final int _version;
 
-  Seq(IPersistentMap meta, PersistentSortedSet set, Seq parent, Leaf node, int idx, Object keyTo, Comparator cmp, boolean asc, int version) {
+  Seq(IPersistentMap meta, PersistentSortedSet set, Seq parent, Node node, int idx, Object keyTo, Comparator cmp, boolean asc, int version) {
     super(meta);
     _set = set;
     _parent = parent;
@@ -32,9 +32,9 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
       throw new RuntimeException("Tovarisch, you are iterating and mutating a transient set at the same time!");
   }
 
-  Leaf child() {
-    assert _node instanceof Node;
-    return ((Node) _node).children(_set._storage)[_idx];
+  Node child() {
+    assert _node.branch(_set._storage);
+    return _node._children[_idx];
   }
 
   boolean over() {
@@ -53,6 +53,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
         _parent = _parent.next();
         if (_parent != null) {
           _node = _parent.child();
+          _node.ensureLoaded(_set._storage);
           _idx = 0;
           return !over();
         }
@@ -65,6 +66,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
         _parent = _parent.next();
         if (_parent != null) {
           _node = _parent.child();
+          _node.ensureLoaded(_set._storage);
           _idx = _node._len - 1;
           return !over();
         }
@@ -80,8 +82,8 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
   // ASeq
   public Object first() {
     checkVersion();
-    // assert !(_node instanceof Node);
-    return _node.keys(_set._storage)[_idx];
+    // assert _node.leaf();
+    return _node._keys[_idx];
   }
 
   public Seq next() {
@@ -130,7 +132,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
     if (_parent == null) return null;
     Seq nextParent = _parent.next();
     if (nextParent == null) return null;
-    Leaf node = nextParent.child();
+    Node node = nextParent.child();
     Seq seq = new Seq(meta(), _set, nextParent, node, _asc ? 0 : node._len - 1, _keyTo, _cmp, _asc, _version);
     return seq.over() ? null : seq;
   }

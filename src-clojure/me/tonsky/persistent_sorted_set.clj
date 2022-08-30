@@ -6,7 +6,7 @@
     [me.tonsky.persistent-sorted-set.arrays :as arrays])
   (:import
     [java.util Comparator Arrays]
-    [me.tonsky.persistent_sorted_set ArrayUtil Edit IStorage Leaf Node PersistentSortedSet]))
+    [me.tonsky.persistent_sorted_set ArrayUtil IStorage Node PersistentSortedSet]))
 
 (set! *warn-on-reflection* true)
 
@@ -79,20 +79,24 @@
   ([^Comparator cmp keys]
    (from-sorted-array cmp keys (arrays/alength keys)))
   ([^Comparator cmp keys len]
-   (let [max    PersistentSortedSet/MAX_LEN
-         avg    (quot (+ PersistentSortedSet/MIN_LEN max) 2)
-         edit   (Edit. false)
-         ->Leaf (fn [keys]
-                  (Leaf. keys (count keys) edit))
-         ->Node (fn [children]
-                  (Node.
-                    (arrays/amap #(.maxKey ^Leaf % nil) Object children)
-                    children (count children) edit))]
+   (let [max     PersistentSortedSet/MAX_LEN
+         avg     (quot (+ PersistentSortedSet/MIN_LEN max) 2)
+         storage nil
+         edit    nil
+         ->Leaf  (fn [keys]
+                   (Node. keys (count keys) edit))
+         ->Node  (fn [^"[Lme.tonsky.persistent_sorted_set.Node;" children]
+                   (Node.
+                     storage
+                     ^objects (arrays/amap #(.maxKey ^Node % nil) Object children)
+                     children
+                     (count children)
+                     edit))]
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
          0 (PersistentSortedSet. cmp)
          1 (PersistentSortedSet. {} cmp nil (first nodes) edit 0)
-         (recur (mapv ->Node (split nodes (count nodes) Leaf avg max))))))))
+         (recur (mapv ->Node (split nodes (count nodes) Node avg max))))))))
 
 
 (defn from-sequential
@@ -117,37 +121,41 @@
 
 
 (defn load [^Comparator cmp ^IStorage storage address]
-  (let [edit (Edit. false)
-        root (Node. address edit)]
+  (let [root (Node. address)]
     (.load storage root)
-    (PersistentSortedSet. nil cmp storage root edit 0)))
+    (PersistentSortedSet. nil cmp storage root nil 0)))
+
 
 (defn stats [^PersistentSortedSet set]
   (let [root          (.-_root set)
-        leaf?         #(not (instance? Node %))
-        loaded?       #(.-_isLoaded ^Leaf %)
-        loaded-ratio  (fn loaded-ratio [^Leaf leaf]
+        storage       (.-_storage set)
+        loaded-ratio  (fn loaded-ratio [^Node node]
                         (cond
-                          (leaf? leaf)         1
-                          (not (loaded? leaf)) 0
+                          (not (.loaded node))
+                          0
+                          
+                          (.leaf node storage)
+                          1
+                          
                           :else
-                          (let [node     ^Node leaf
-                                len      (.-_len node)
-                                children (take len (.-_children node))]
+                          (let [len      (.len node storage)
+                                children (take len (.children node storage))]
                             (/
                               (->> children
                                 (map loaded-ratio)
                                 (reduce + 0))
                               len))))
-        durable-ratio (fn durable-ratio [^Leaf leaf]
+        durable-ratio (fn durable-ratio [^Node node]
                         (cond
-                          (not (loaded? leaf))      1
-                          (some? (.-_address leaf)) 1
-                          (leaf? leaf)              0
+                          (not (.loaded node))
+                          1
+                          
+                          (.durable node)
+                          1
+                          
                           :else
-                          (let [node     ^Node leaf
-                                len      (.-_len node)
-                                children (take len (.-_children node))]
+                          (let [len      (.len node storage)
+                                children (take len (.children node storage))]
                             (/
                               (->> children
                                 (map durable-ratio)

@@ -6,7 +6,7 @@
   (:import
     [clojure.lang RT]
     [java.util Comparator Arrays]
-    [me.tonsky.persistent_sorted_set ArrayUtil Edit IStorage Leaf Node PersistentSortedSet]))
+    [me.tonsky.persistent_sorted_set ArrayUtil IStorage Node PersistentSortedSet]))
 
 (set! *warn-on-reflection* true)
 
@@ -14,61 +14,40 @@
   (random-uuid)
   #_(str/join (repeatedly 10 #(rand-nth "ABCDEFGHIJKLMNOPQRSTUVWXYZ"))))
 
-(defn leaf? [node]
-  (not (instance? Node node)))
-
 (defn persist
   ([^PersistentSortedSet set]
    (let [root     (.-_root set)
          *storage (atom (transient {}))
          address  (persist *storage root 0)]
      [address (persistent! @*storage)]))
-  ([*storage ^Leaf leaf depth]
+  ([*storage ^Node node depth]
    (let [address (str depth "-" (gen-addr))
-         count   (.count leaf nil)
-         keys    (into [] (take (.-_len leaf)) (.keys leaf nil))]
+         count   (.count node nil)
+         keys    (into [] (take (.len node nil) (.keys node nil)))]
      (swap! *storage assoc! address 
-       (if (leaf? leaf)
+       (if (.leaf node nil)
          keys
-         (let [node     ^Node leaf
-               children (.children node nil)
-               child-fn (if (leaf? (first children))
-                          (fn [^Leaf leaf] (into [] (take (.-_len leaf)) (.keys leaf nil)))
-                          #(persist *storage % (inc depth)))]
-           {:keys     keys
-            :count    count
-            :children (into []
-                        (comp
-                          (take (.-_len node))
-                          (map child-fn))
-                        children)})))
+         {:keys     keys
+          :count    count
+          :children (->> (.children node nil)
+                      (take (.len node nil))
+                      (mapv #(persist *storage % (inc depth))))}))
      address)))
-
-(defn print-storage
-  ([address storage]
-   (print-storage address storage ""))
-  ([address storage indent]
-   (let [node (storage address)]
-     (println indent address (:count node))
-     (doseq [child (:children node)]
-       (if (vector? child)
-         (println indent " [" (take 5 child) "... <" (count child) "elements>]")
-         (print-storage child storage (str indent "  ")))))))
 
 (defn wrap-storage [storage]
   (reify IStorage
     (^void load [_ ^Node node]
       (let [address (.-_address node)
-            edit    (.-_edit node)
-            data    (storage address)
-            {:keys [keys children count]} data
-            keys     (to-array keys)
-            ; _        (println "  loading" address)
-            children (if (vector? (first children))
-                       (into-array Leaf (map #(Leaf. (to-array %) edit) children))
-                       (into-array Leaf (map #(Node. % edit) children)))]
-        (.onLoad node keys children count)
-        nil))))
+            edit    nil
+            ; _       (println "  loading" address)
+            data    (storage address)]
+        (if (vector? data)
+          (let [keys (to-array data)]
+            (.onLoad node keys (alength keys)))
+          (let [{:keys [keys children count]} data
+                keys     (to-array keys)
+                children (into-array Node (map (fn [addr] (Node. addr)) children))]
+            (.onLoad node keys children (alength keys) count)))))))
 
 (defn lazy-load [original]
   (let [[address storage] (persist original)]
@@ -142,10 +121,8 @@
         _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
     
         ; transient disj
-        lratio  (:loaded-ratio (set/stats loaded))
         xs      (take 100 loaded)
         loaded' (reduce disj loaded xs)
         _       (is (every? #(not (loaded' %)) xs))
-        _       (is (= lratio (:loaded-ratio (set/stats loaded'))))
         _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
         ]))

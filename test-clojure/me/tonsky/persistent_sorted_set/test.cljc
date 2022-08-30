@@ -3,27 +3,22 @@
     [me.tonsky.persistent-sorted-set :as set]
     [me.tonsky.persistent-sorted-set.test-storage :as test-storage]
     #?(:cljs [cljs.test    :as t :refer-macros [is are deftest testing]]
-       :clj  [clojure.test :as t :refer        [is are deftest testing]]))
+        :clj  [clojure.test :as t :refer        [is are deftest testing]]))
   #?(:clj
       (:import [clojure.lang IReduce])))
 
-
 #?(:clj (set! *warn-on-reflection* true))
 
-
 (def iters 5)
-
 
 ;; confirm that clj's use of sorted set works as intended.
 ;; allow for [:foo nil] to glob [:foo *]; data will never be inserted
 ;; w/ nil, but slice/subseq elements will.
 
-
 (defn cmp [x y]
   (if (and x y)
     (compare x y)
     0))
-
 
 (defn cmp-s [[x0 x1] [y0 y1]]
   (let [c0 (cmp x0 y0)
@@ -32,7 +27,6 @@
       (= c0 0) c1
       (< c0 0) -1
       (> c0 0)  1)))
-
 
 (deftest semantic-test-btset-by
   (let [e0 (set/sorted-set-by cmp-s)
@@ -257,11 +251,9 @@
           6000 -100  (irange 5000 0))))
     ))
 
-
 (defn ireduce
   ([f coll] (#?(:clj .reduce :cljs -reduce) ^IReduce coll f))
   ([f val coll] (#?(:clj .reduce :cljs -reduce) ^IReduce coll f val)))
-
 
 (defn reduce-chunked [f val coll]
   (if-some [s (seq coll)]
@@ -269,7 +261,6 @@
       (recur f (#?(:clj .reduce :cljs -reduce) (chunk-first s) f val) (chunk-next s))
       (recur f (f val (first s)) (next s)))
     val))
-
 
 (deftest test-reduces
   (testing "IReduced"
@@ -334,27 +325,28 @@
         (is (thrown-with-msg? Exception #"iterating and mutating" (.iterator ^Iterable seq)))
         )))
 
-
 (defn into-via-doseq [to from]
   (let [res (transient [])]
     (doseq [x from]  ;; checking chunked iter
       (conj! res x))
     (persistent! res)))
 
-
 (deftest stresstest-btset
   (println "[ TEST ] stresstest-btset")
   (dotimes [i iters]
-    (let [xs        (vec (repeatedly (+ 1 (rand-int 10000)) #(rand-int 10000)))
+    (let [size      10000
+          xs        (vec (repeatedly (+ 1 (rand-int size)) #(rand-int size)))
           xs-sorted (vec (distinct (sort xs)))
-          rm        (vec (repeatedly (rand-int 50000) #(rand-nth xs)))
+          rm        (vec (repeatedly (rand-int (* size 5)) #(rand-nth xs)))
           full-rm   (shuffle (concat xs rm))
           xs-rm     (reduce disj (into (sorted-set) xs) rm)]
       (doseq [[method set0] [["conj" (into (set/sorted-set) xs)]
                              ["bulk" (apply set/sorted-set xs)]
                              ["lazy" (test-storage/lazy-load (into (set/sorted-set) xs))]]
               :let [set1 (reduce disj set0 rm)
-                    set2 (reduce disj set0 full-rm)]]
+                    set2 (persistent! (reduce disj (transient set0) rm))
+                    set3 (reduce disj set0 full-rm)
+                    set4 (persistent! (reduce disj (transient set0) full-rm))]]
         (println "Iter:" (str (inc i)  "/" iters)
           "set:" method 
           "adds:" (str (count xs) " (" (count xs-sorted) " distinct),")
@@ -363,7 +355,7 @@
           (testing "conj, seq"
             (is (= (vec set0) xs-sorted)))
           (testing "eq"
-            (is (= set0 (set xs-sorted))))
+            (is (= set0 (set xs-sorted)) xs-sorted))
           (testing "count"
             (is (= (count set0) (count xs-sorted))))
           (testing "doseq"
@@ -371,8 +363,14 @@
           (testing "disj"
             (is (= (vec set1) (vec xs-rm)))
             (is (= (count set1) (count xs-rm)))
-            (is (= set1 xs-rm))
-            (is (= set2 #{}))))
+            (is (= set1 xs-rm)))
+          (testing "disj transient"
+            (is (= (vec set2) (vec xs-rm)))
+            (is (= (count set2) (count xs-rm)))
+            (is (= set2 xs-rm)))
+          (testing "full disj"
+            (is (= set3 #{}))
+            (is (= set4 #{}))))
         )))
   (println "[ DONE ] stresstest-btset"))
 

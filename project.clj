@@ -29,6 +29,7 @@
     :1.9 {:dependencies [[org.clojure/clojure         "1.9.0"   :scope "provided"]
                          [org.clojure/clojurescript   "1.9.946" :scope "provided"]] }
     :bench {:dependencies [[com.datomic/datomic-pro "1.0.6397"]]
-            :java-source-paths ["bench-java"] }
+            :java-source-paths ["bench-java"]
+            :jvm-opts ["-server"]}
   }
 )
