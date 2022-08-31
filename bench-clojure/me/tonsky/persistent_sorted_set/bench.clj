@@ -6,6 +6,8 @@
     [criterium.core :as criterium]
     [me.tonsky.persistent-sorted-set :as set]))
 
+(set/set-branching-factor! 64)
+
 (when-not (.exists (io/file "bench-clojure/ints-10K.edn"))
   (let [xs (vec (shuffle (range 10000)))]
     (spit "bench-clojure/ints-10K.edn" (pr-str xs))))

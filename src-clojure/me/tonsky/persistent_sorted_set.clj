@@ -126,6 +126,11 @@
     (PersistentSortedSet. nil cmp storage root -1 nil 0)))
 
 
+(defn set-branching-factor!
+  "Global -- applies to all sets. Must be power of 2. Defaults to 64"
+  [n]
+  (PersistentSortedSet/setMaxLen n))
+
 (defn stats [^PersistentSortedSet set]
   (let [root          (.-_root set)
         storage       (.-_storage set)

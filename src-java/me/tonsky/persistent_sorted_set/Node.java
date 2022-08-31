@@ -152,6 +152,11 @@ public class Node {
     _len      = len;
   }
 
+  public void onPersist(Object address) {
+    // TODO sync?
+    _address = address;
+  }
+
   // onPersist?
 
   public Object address() {
@@ -839,5 +844,30 @@ public class Node {
       sb.append(_keys[i].toString());
     }
     return sb.append("}").toString();
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    toString(sb, "");
+    return sb.toString();
+  }
+
+  public void toString(StringBuilder sb, String indent) {
+    sb.append(indent);
+    sb.append("Address: " + _address + " " + durable() + " ");
+    sb.append(_keys == null ? "Lazy " : "Eager ");
+    if (_keys != null) {
+      sb.append("Len: " + _len + " ");
+      if (_children == null)
+        sb.append("Leaf ");
+      else {
+        sb.append("Branch ");
+        for (int i = 0; i < _len; ++i) {
+          sb.append("\n");
+          _children[i].toString(sb, indent + "  ");
+        }
+      }
+    }
   }
 }

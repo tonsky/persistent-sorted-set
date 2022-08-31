@@ -16,21 +16,33 @@
 
 (defn persist
   ([^PersistentSortedSet set]
+   (persist {} set))
+  ([storage ^PersistentSortedSet set]
    (let [root     (.-_root set)
-         *storage (atom (transient {}))
-         address  (persist *storage root 0)]
-     [address (persistent! @*storage)]))
-  ([*storage ^Node node depth]
-   (let [address (str depth "-" (gen-addr))
-         keys    (into [] (take (.len node nil) (.keys node nil)))]
-     (swap! *storage assoc! address 
-       (if (.leaf node nil)
-         keys
-         {:keys     keys
-          :children (->> (.children node nil)
-                      (take (.len node nil))
-                      (mapv #(persist *storage % (inc depth))))}))
-     address)))
+         *storage (atom storage)
+         *stats   (atom {:writes 0})
+         address  (persist *storage *stats root 0)]
+     {:address address
+      :storage @*storage
+      :stats   @*stats}))
+  ([*storage *stats ^Node node depth]
+   (if (.durable node)
+     (.address node)
+     (let [_       (assert (.loaded node))
+           address (str depth "-" (gen-addr))
+           len     (.len node nil)
+           keys    (into [] (take len (.keys node nil)))]
+       ; (println "Writing" address)
+       (swap! *storage assoc address 
+         (if (.leaf node nil)
+           keys
+           {:keys     keys
+            :children (->> (.children node nil)
+                        (take len)
+                        (mapv #(persist *storage *stats % (inc depth))))}))
+       (.onPersist node address)
+       (swap! *stats update :writes inc)
+       address))))
 
 (defn wrap-storage [storage]
   (reify IStorage
@@ -47,17 +59,20 @@
             (.onLoadBranch node keys children)))))))
 
 (defn lazy-load [original]
-  (let [[address storage] (persist original)]
+  (let [{:keys [address storage]} (persist original)]
     (set/load RT/DEFAULT_COMPARATOR (wrap-storage storage) address)))
 
 (deftest test-lazyness
-  ; (PersistentSortedSet/setMaxLen 1024)
-  (let [xs       (shuffle (range 1000000))
-        rm       (vec (repeatedly (rand-int 500000) #(rand-nth xs)))
+  (let [size     1000000
+        xs       (shuffle (range size))
+        rm       (vec (repeatedly (quot size 5) #(rand-nth xs)))
         original (-> (reduce disj (into (set/sorted-set) xs) rm)
-                   (disj 250000 500000))
-        [address storage] (persist original)
-        loaded   (set/load RT/DEFAULT_COMPARATOR (wrap-storage storage) address)
+                   (disj (quot size 4) (quot size 2)))
+        {:keys [address storage stats]} (persist original)
+        _       (is (> (:writes stats) (/ size PersistentSortedSet/MAX_LEN)))
+        loaded  (set/load RT/DEFAULT_COMPARATOR (wrap-storage storage) address)
+        _       (is (= 0.0 (:loaded-ratio (set/stats loaded))))
+        _       (is (= 1.0 (:durable-ratio (set/stats loaded))))
                 
         ; touch first 100
         _       (is (= (take 100 loaded) (take 100 original)))
@@ -70,7 +85,10 @@
         _       (is (< l100 l5000 1.0))
     
         ; touch middle
-        _       (is (= (vec (set/slice loaded 495000 505000)) (vec (set/slice loaded 495000 505000))))
+        from    (- (quot size 2) (quot size 200))
+        to      (+ (quot size 2) (quot size 200))
+        _       (is (= (vec (set/slice loaded from to))
+                      (vec (set/slice loaded from to))))
         lmiddle (:loaded-ratio (set/stats loaded))
         _       (is (< l5000 lmiddle 1.0))
         
@@ -80,7 +98,10 @@
         _       (is (< lmiddle lrseq 1.0))
     
         ; touch 10000 last
-        _       (is (= (vec (set/slice loaded 990000 1000000)) (vec (set/slice loaded 990000 1000000))))
+        from    (- size (quot size 100))
+        to      size
+        _       (is (= (vec (set/slice loaded from to))
+                      (vec (set/slice loaded from 1000000))))
         ltail   (:loaded-ratio (set/stats loaded))
         _       (is (< lrseq ltail 1.0))
     
@@ -90,7 +111,7 @@
         _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
         
         ; conj to middle
-        loaded' (conj loaded 500000)
+        loaded' (conj loaded (quot size 2))
         _       (is (= ltail (:loaded-ratio (set/stats loaded'))))
         _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
         
@@ -100,17 +121,24 @@
         _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
         
         ; conj to untouched area
-        loaded' (conj loaded 250000)
+        loaded' (conj loaded (quot size 4))
         _       (is (< ltail (:loaded-ratio (set/stats loaded')) 1.0))
         _       (is (< ltail (:loaded-ratio (set/stats loaded)) 1.0))
         _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
     
         ; transients conj
-        xs      (range 10000)
+        xs      (range -10000 0)
         loaded' (into loaded xs)
         _       (is (every? loaded' xs))
-        _       (is (< ltail (:loaded-ratio (set/stats loaded'))))
+        lprep   (:loaded-ratio (set/stats loaded'))
+        _       (is (< ltail lprep))
         _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
+        
+        ; incremental persist
+        {stats' :stats} (persist storage loaded')
+        _       (is (< (:writes stats') 350)) ;; ~ 10000 / 32 + 10000 / 32 / 32 + 1
+        _       (is (= lprep (:loaded-ratio (set/stats loaded'))))
+        _       (is (= 1.0 (:durable-ratio (set/stats loaded'))))
     
         ; transient disj
         xs      (take 100 loaded)
