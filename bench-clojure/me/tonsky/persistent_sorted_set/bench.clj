@@ -61,7 +61,7 @@
   (let [fn            (resolve sym)
         _             (print (format "%-30s" (name sym)))
         _             (flush)
-        results       (criterium/benchmark (fn) {})
+        results       (criterium/quick-benchmark (fn) {})
         [mean & _]    (:mean results)
         [factor unit] (criterium/scale-time mean)]
     (println (criterium/format-value mean factor unit))
