@@ -62,8 +62,9 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     return _edit != null && _edit.get();
   }
 
-  public void onPersist(Object address) {
+  public Object onPersist(Object address) {
     _address = address;
+    return address;
   }
 
   // IPersistentSortedSet

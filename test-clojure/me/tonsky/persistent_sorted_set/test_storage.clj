@@ -20,31 +20,31 @@
   ([storage ^PersistentSortedSet set]
    (let [*storage (atom storage)
          *stats   (atom {:writes 0})
-         address  (persist *storage *stats (.-_address set) (.-_root set) 0)]
-     (.onPersist set address)
+         address  (or (.-_address set)
+                    (.onPersist set
+                      (persist *storage *stats (.-_root set) 0)))]
      {:address address
       :storage @*storage
       :stats   @*stats}))
-  ([*storage *stats address ^Node node depth]
-   (or address
-     (let [address (gen-addr depth)
-           len     (.len node)
-           keys    (->> (.-_keys node) (take len) (into []))]
-       (swap! *storage assoc address 
-         (if (.leaf node)
-           {:keys keys}
-           {:keys keys
-            :addresses
-            (mapv
-              (fn [idx child-address child]
-                (let [child-address (persist *storage *stats child-address child (inc depth))]
-                  (.onPersist node idx child-address)
-                  child-address))
-              (range len)
-              (.-_addresses node)
-              (.-_children node))}))
-       (swap! *stats update :writes inc)
-       address))))
+  ([*storage *stats ^Node node depth]
+   (let [address (gen-addr depth)
+         len     (.len node)
+         keys    (->> (.-_keys node) (take len) (into []))]
+     (swap! *storage assoc address 
+       (if (.leaf node)
+         {:keys keys}
+         {:keys keys
+          :addresses
+          (mapv
+            (fn [idx child-address child]
+              (or child-address
+                (.onPersist node idx
+                  (persist *storage *stats child (inc depth)))))
+            (range len)
+            (.-_addresses node)
+            (.-_children node))}))
+     (swap! *stats update :writes inc)
+     address)))
 
 (defn wrap-storage [storage]
   (reify IStorage

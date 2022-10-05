@@ -146,10 +146,11 @@ public class Node {
     return _edit != null && _edit.get();
   }
 
-  public void onPersist(int idx, Object address) {
+  public Object onPersist(int idx, Object address) {
     assert 0 <= idx && idx < _len;
 
     _addresses[idx] = address;
+    return address;
   }
 
   private Node newBranch(int len, AtomicBoolean edit) {
