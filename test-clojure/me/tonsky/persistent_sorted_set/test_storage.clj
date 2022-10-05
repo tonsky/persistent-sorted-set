@@ -10,53 +10,50 @@
 
 (set! *warn-on-reflection* true)
 
-(defn gen-addr []
-  (random-uuid)
-  #_(str/join (repeatedly 10 #(rand-nth "ABCDEFGHIJKLMNOPQRSTUVWXYZ"))))
+(defn gen-addr [depth]
+  #_(random-uuid)
+  (str depth "-" (str/join (repeatedly 10 #(rand-nth "ABCDEFGHIJKLMNOPQRSTUVWXYZ")))))
 
 (defn persist
   ([^PersistentSortedSet set]
    (persist {} set))
   ([storage ^PersistentSortedSet set]
-   (let [root     (.-_root set)
-         *storage (atom storage)
+   (let [*storage (atom storage)
          *stats   (atom {:writes 0})
-         address  (persist *storage *stats root 0)]
+         address  (persist *storage *stats (.-_address set) (.-_root set) 0)]
+     (.onPersist set address)
      {:address address
       :storage @*storage
       :stats   @*stats}))
-  ([*storage *stats ^Node node depth]
-   (if (.durable node)
-     (.address node)
-     (let [_       (assert (.loaded node))
-           address (str depth "-" (gen-addr))
-           len     (.len node nil)
-           keys    (into [] (take len (.keys node nil)))]
-       ; (println "Writing" address)
+  ([*storage *stats address ^Node node depth]
+   (or address
+     (let [address (gen-addr depth)
+           len     (.len node)
+           keys    (->> (.-_keys node) (take len) (into []))]
        (swap! *storage assoc address 
-         (if (.leaf node nil)
-           keys
-           {:keys     keys
-            :children (->> (.children node nil)
-                        (take len)
-                        (mapv #(persist *storage *stats % (inc depth))))}))
-       (.onPersist node address)
+         (if (.leaf node)
+           {:keys keys}
+           {:keys keys
+            :addresses
+            (mapv
+              (fn [idx child-address child]
+                (let [child-address (persist *storage *stats child-address child (inc depth))]
+                  (.onPersist node idx child-address)
+                  child-address))
+              (range len)
+              (.-_addresses node)
+              (.-_children node))}))
        (swap! *stats update :writes inc)
        address))))
 
 (defn wrap-storage [storage]
   (reify IStorage
-    (^void load [_ ^Node node]
-      (let [address (.-_address node)
-            ; _       (println "  loading" address)
-            data    (storage address)]
-        (if (vector? data)
-          (let [keys (to-array data)]
-            (.onLoadLeaf node keys))
-          (let [{:keys [keys children]} data
-                keys     (to-array keys)
-                children (into-array Node (map (fn [addr] (Node. addr)) children))]
-            (.onLoadBranch node keys children)))))))
+    (^Node load [_ address]
+      (let [{:keys [keys addresses]} (storage address)
+            len (count keys)]
+        (if addresses
+          (Node. len (to-array keys) (to-array addresses) (make-array Node len) nil)
+          (Node. len (to-array keys) nil))))))
 
 (defn lazy-load [original]
   (let [{:keys [address storage]} (persist original)]
@@ -149,5 +146,4 @@
         ; count fetches everything
         _       (is (= (count loaded) (count original)))
         l0      (:loaded-ratio (set/stats loaded))
-        _       (is (= 1.0 l0))
-        ]))
+        _       (is (= 1.0 l0))]))

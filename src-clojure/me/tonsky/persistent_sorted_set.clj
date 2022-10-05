@@ -85,17 +85,18 @@
          storage nil
          edit    nil
          ->Leaf  (fn [keys]
-                   (Node. keys (count keys) edit))
+                   (Node. (count keys) keys edit))
          ->Node  (fn [^"[Lme.tonsky.persistent_sorted_set.Node;" children]
                    (Node.
-                     ^objects (arrays/amap #(.maxKey ^Node % storage) Object children)
-                     children
                      (count children)
+                     ^objects (arrays/amap #(.maxKey ^Node %) Object children)
+                     (object-array (count children))
+                     children
                      edit))]
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
          0 (PersistentSortedSet. cmp)
-         1 (PersistentSortedSet. {} cmp storage (first nodes) len edit 0)
+         1 (PersistentSortedSet. {} cmp nil storage (first nodes) len edit 0)
          (recur (mapv ->Node (split nodes (count nodes) Node avg max))))))))
 
 
@@ -121,9 +122,7 @@
 
 
 (defn load [^Comparator cmp ^IStorage storage address]
-  (let [root (Node. address)]
-    (.load storage root)
-    (PersistentSortedSet. nil cmp storage root -1 nil 0)))
+  (PersistentSortedSet. nil cmp address storage nil -1 nil 0))
 
 
 (defn set-branching-factor!
@@ -131,40 +130,37 @@
   [n]
   (PersistentSortedSet/setMaxLen n))
 
+
 (defn stats [^PersistentSortedSet set]
-  (let [root          (.-_root set)
+  (let [address       (.-_address set)
+        root          (.-_root set)
         storage       (.-_storage set)
         loaded-ratio  (fn loaded-ratio [^Node node]
-                        (cond
-                          (not (.loaded node))
-                          0
-                          
-                          (.leaf node storage)
-                          1
-                          
+                        (cond 
+                          (nil? node)  0.0
+                          (.leaf node) 1.0
                           :else
-                          (let [len      (.len node storage)
-                                children (take len (.children node storage))]
-                            (/
-                              (->> children
-                                (map loaded-ratio)
-                                (reduce + 0))
+                          (let [len (.len node)
+                                children (take len)]
+                            (/ (->> (.-_children node) (take len) (map loaded-ratio) (reduce + 0))
                               len))))
-        durable-ratio (fn durable-ratio [^Node node]
-                        (cond
-                          (not (.loaded node))
-                          1
-                          
-                          (.durable node)
-                          1
-                          
+        durable-ratio (fn durable-ratio [address ^Node node]
+                        (cond 
+                          (some? address) 1.0
+                          (.leaf node)    0.0
                           :else
-                          (let [len      (.len node storage)
-                                children (take len (.children node storage))]
-                            (/
-                              (->> children
-                                (map durable-ratio)
-                                (reduce + 0))
+                          (let [len (.len node)
+                                children (take len)]
+                            (/ (->>
+                                 (map
+                                   (fn [_ addr child]
+                                     (durable-ratio addr child))
+                                   (range len)
+                                   (.-_addresses node)
+                                   (.-_children node))
+                                 (reduce + 0))
                               len))))]
-    {:loaded-ratio  (double (loaded-ratio root))
-     :durable-ratio (double (durable-ratio root))}))
+    {:loaded-ratio  (if (some? root)
+                      (double (loaded-ratio root))
+                      0.0)
+     :durable-ratio (double (durable-ratio address root))}))

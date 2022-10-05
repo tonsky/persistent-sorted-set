@@ -322,8 +322,8 @@
         (is (thrown-with-msg? Exception #"iterating and mutating" (reduce + 0 seq)))
         (is (thrown-with-msg? Exception #"iterating and mutating" (chunk-first seq)))
         (is (thrown-with-msg? Exception #"iterating and mutating" (chunk-next seq)))
-        (is (thrown-with-msg? Exception #"iterating and mutating" (.iterator ^Iterable seq)))
-        )))
+        (is (thrown-with-msg? Exception #"iterating and mutating" (.iterator ^Iterable seq))))))
+        
 
 (defn into-via-doseq [to from]
   (let [res (transient [])]
@@ -370,8 +370,8 @@
             (is (= set2 xs-rm)))
           (testing "full disj"
             (is (= set3 #{}))
-            (is (= set4 #{}))))
-        )))
+            (is (= set4 #{})))))))
+        
   (println "[ DONE ] stresstest-btset"))
 
 
@@ -396,7 +396,7 @@
             (is (= (vec set-range) expected))
             (is (= (into-via-doseq [] set-range) expected))
             (is (= (vec (rseq set-range)) (reverse expected)))
-            (is (= (vec (rseq (rseq set-range))) expected))
-            )))))
+            (is (= (vec (rseq (rseq set-range))) expected)))))))
+            
   (println "[ DONE ] stresstest-slice"))
 
