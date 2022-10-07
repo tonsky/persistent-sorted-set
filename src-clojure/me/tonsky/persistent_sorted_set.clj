@@ -7,7 +7,7 @@
   (:import
     [java.util Comparator Arrays]
     [java.util.concurrent.atomic AtomicBoolean]
-    [me.tonsky.persistent_sorted_set ArrayUtil IStorage Node PersistentSortedSet]))
+    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet]))
 
 (set! *warn-on-reflection* true)
 
@@ -80,24 +80,24 @@
   ([^Comparator cmp keys]
    (from-sorted-array cmp keys (arrays/alength keys)))
   ([^Comparator cmp keys len]
-   (let [max     PersistentSortedSet/MAX_LEN
-         avg     (quot (+ PersistentSortedSet/MIN_LEN max) 2)
-         storage nil
-         edit    nil
-         ->Leaf  (fn [keys]
-                   (Node. (count keys) keys edit))
-         ->Node  (fn [^"[Lme.tonsky.persistent_sorted_set.Node;" children]
-                   (Node.
-                     (count children)
-                     ^objects (arrays/amap #(.maxKey ^Node %) Object children)
-                     (object-array (count children))
-                     children
-                     edit))]
+   (let [max       PersistentSortedSet/MAX_LEN
+         avg       (quot (+ PersistentSortedSet/MIN_LEN max) 2)
+         storage   nil
+         edit      nil
+         ->Leaf    (fn [keys]
+                     (Leaf. (count keys) keys edit))
+         ->Branch  (fn [^"[Lme.tonsky.persistent_sorted_set.ANode;" children]
+                     (Branch.
+                       (count children)
+                       ^objects (arrays/amap #(.maxKey ^ANode %) Object children)
+                       (object-array (count children))
+                       children
+                       edit))]
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
          0 (PersistentSortedSet. cmp)
          1 (PersistentSortedSet. {} cmp nil storage (first nodes) len edit 0)
-         (recur (mapv ->Node (split nodes (count nodes) Node avg max))))))))
+         (recur (mapv ->Branch (split nodes (count nodes) ANode avg max))))))))
 
 
 (defn from-sequential
@@ -135,19 +135,19 @@
   (let [address       (.-_address set)
         root          (.-_root set)
         storage       (.-_storage set)
-        loaded-ratio  (fn loaded-ratio [^Node node]
+        loaded-ratio  (fn loaded-ratio [^ANode node]
                         (cond 
                           (nil? node)  0.0
-                          (.leaf node) 1.0
+                          (instance? Leaf node) 1.0
                           :else
                           (let [len (.len node)
                                 children (take len)]
-                            (/ (->> (.-_children node) (take len) (map loaded-ratio) (reduce + 0))
+                            (/ (->> (.-_children ^Branch node) (take len) (map loaded-ratio) (reduce + 0))
                               len))))
-        durable-ratio (fn durable-ratio [address ^Node node]
+        durable-ratio (fn durable-ratio [address ^ANode node]
                         (cond 
-                          (some? address) 1.0
-                          (.leaf node)    0.0
+                          (some? address)       1.0
+                          (instance? Leaf node) 0.0
                           :else
                           (let [len (.len node)
                                 children (take len)]
@@ -156,8 +156,8 @@
                                    (fn [_ addr child]
                                      (durable-ratio addr child))
                                    (range len)
-                                   (.-_addresses node)
-                                   (.-_children node))
+                                   (.-_addresses ^Branch node)
+                                   (.-_children ^Branch node))
                                  (reduce + 0))
                               len))))]
     {:loaded-ratio  (if (some? root)

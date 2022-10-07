@@ -6,7 +6,7 @@
   (:import
     [clojure.lang RT]
     [java.util Comparator Arrays]
-    [me.tonsky.persistent_sorted_set ArrayUtil IStorage Node PersistentSortedSet]))
+    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet]))
 
 (set! *warn-on-reflection* true)
 
@@ -26,34 +26,34 @@
      {:address address
       :storage @*storage
       :stats   @*stats}))
-  ([*storage *stats ^Node node depth]
+  ([*storage *stats ^ANode node depth]
    (let [address (gen-addr depth)
          len     (.len node)
          keys    (->> (.-_keys node) (take len) (into []))]
      (swap! *storage assoc address 
-       (if (.leaf node)
+       (if (instance? Leaf node)
          {:keys keys}
          {:keys keys
           :addresses
           (mapv
             (fn [idx child-address child]
               (or child-address
-                (.onPersist node idx
+                (.onPersist ^Branch node idx
                   (persist *storage *stats child (inc depth)))))
             (range len)
-            (.-_addresses node)
-            (.-_children node))}))
+            (.-_addresses ^Branch node)
+            (.-_children ^Branch node))}))
      (swap! *stats update :writes inc)
      address)))
 
 (defn wrap-storage [storage]
   (reify IStorage
-    (^Node load [_ address]
+    (^ANode load [_ address]
       (let [{:keys [keys addresses]} (storage address)
             len (count keys)]
         (if addresses
-          (Node. len (to-array keys) (to-array addresses) (make-array Node len) nil)
-          (Node. len (to-array keys) nil))))))
+          (Branch. len (to-array keys) (to-array addresses) (make-array ANode len) nil)
+          (Leaf. len (to-array keys) nil))))))
 
 (defn lazy-load [original]
   (let [{:keys [address storage]} (persist original)]
