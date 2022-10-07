@@ -69,6 +69,54 @@
       (let [set' (disj set 3500)] ;; one of the middle branches
         (is (< 0.99 (:durable-ratio (set/stats set'))))))))
 
+(deftest stresstest-stable-addresses
+  (let [size      100000
+        batch     100
+        adds      (shuffle (range size))
+        removes   (shuffle adds)
+        *set      (atom (set/sorted-set))
+        *storage  (atom {})
+        invariant (fn invariant [o]
+                    (condp instance? o
+                      PersistentSortedSet
+                      (invariant (.-_root ^PersistentSortedSet o))
+                      
+                      Branch
+                      (let [node ^Branch o
+                            len (.len node)]
+                        (doseq [i (range len)
+                                :let [addr   (nth (.-_addresses node) i)
+                                      child  (nth (.-_children node) i)
+                                      {:keys [keys addresses]} (get @*storage addr)] 
+                                :when (some? addr)]
+                          (testing addr
+                            (is (= keys 
+                                  (take (.len ^ANode child) (.-_keys ^ANode child))))
+                            (is (= addresses
+                                  (when (instance? Branch child)
+                                    (take (.len ^Branch child) (.-_addresses ^Branch child)))))
+                            (invariant child))))
+                      
+                      Leaf
+                      true))]
+    (testing "Persist after each"
+      (doseq [xs (partition-all batch adds)
+              :let [set' (swap! *set into xs)]]
+        (invariant set')
+        (reset! *storage (:storage (persist @*storage set'))))
+      (invariant @*set)
+      (doseq [xs (partition-all batch removes)
+              :let [set' (swap! *set #(reduce disj % xs))]]
+        (invariant set')
+        (reset! *storage (:storage (persist @*storage set')))))
+    
+    (testing "Persist once"
+      (reset! *set (into (set/sorted-set) adds))
+      (reset! *storage (:storage (persist @*set)))
+      (doseq [xs (partition-all batch removes)
+              :let [set' (swap! *set #(reduce disj % xs))]]
+        (invariant set')))))
+    
 (deftest test-lazyness
   (let [size     1000000
         xs       (shuffle (range size))
