@@ -22,13 +22,6 @@ public abstract class ANode {
     return _len;
   }
 
-  public static int newLen(int len, AtomicBoolean edit) {
-    if (edit != null && edit.get())
-        return Math.min(PersistentSortedSet.MAX_LEN, len + PersistentSortedSet.EXPAND_LEN);
-    else
-        return len;
-  }
-
   public Object maxKey() {
     return _keys[_len - 1];
   }
@@ -88,7 +81,7 @@ public abstract class ANode {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    toString(sb, "");
+    toString(sb, null, "");
     return sb.toString();
   }
 
@@ -97,5 +90,16 @@ public abstract class ANode {
   public abstract ANode[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit);
   public abstract ANode[] remove(IStorage storage, Object key, ANode left, ANode right, Comparator cmp, AtomicBoolean edit);
   public abstract String str(IStorage storage, int lvl);
-  public abstract void toString(StringBuilder sb, String indent);
+  public abstract void toString(StringBuilder sb, Object address, String indent);
+
+  protected static int newLen(int len, AtomicBoolean edit) {
+    if (edit != null && edit.get())
+        return Math.min(PersistentSortedSet.MAX_LEN, len + PersistentSortedSet.EXPAND_LEN);
+    else
+        return len;
+  }
+
+  protected static int safeLen(ANode node) {
+    return node == null ? -1 : node._len;
+  }
 }

@@ -234,6 +234,8 @@ public class Branch extends ANode {
     
     ANode leftChild  = idx > 0      ? child(storage, idx - 1) : null,
           rightChild = idx < _len-1 ? child(storage, idx + 1) : null;
+    int leftChildLen = safeLen(leftChild);
+    int rightChildLen = safeLen(rightChild);
     ANode[] nodes = child(storage, idx).remove(storage, key, leftChild, rightChild, cmp, edit);
 
     if (PersistentSortedSet.UNCHANGED == nodes) // child signalling element not in set
@@ -242,6 +244,9 @@ public class Branch extends ANode {
     if (PersistentSortedSet.EARLY_EXIT == nodes) { // child signalling nothing to update
       return PersistentSortedSet.EARLY_EXIT;
     }
+
+    boolean leftChanged = leftChild != nodes[0] || leftChildLen != safeLen(nodes[0]);
+    boolean rightChanged = rightChild != nodes[2] || rightChildLen != safeLen(nodes[2]);
 
     // nodes[1] always not nil
     int newLen = _len - 1
@@ -263,9 +268,9 @@ public class Branch extends ANode {
           ks.copyAll(_keys, idx+2, _len);
 
         Stitch as = new Stitch(_addresses, Math.max(idx-1, 0));
-        if (nodes[0] != null) as.copyOne(null); // FIXME check if left really changed
+        if (nodes[0] != null) as.copyOne(leftChanged ? null : _addresses[idx - 1]);
                               as.copyOne(null);
-        if (nodes[2] != null) as.copyOne(null); // FIXME check if right really changed
+        if (nodes[2] != null) as.copyOne(rightChanged ? null : _addresses[idx + 1]);
         if (newLen != _len)
           as.copyAll(_addresses, idx+2, _len);
 
@@ -291,9 +296,9 @@ public class Branch extends ANode {
 
       Stitch as = new Stitch(newCenter._addresses, 0);
       as.copyAll(_addresses, 0, idx - 1);
-      if (nodes[0] != null) as.copyOne(null); // FIXME
+      if (nodes[0] != null) as.copyOne(leftChanged ? null : _addresses[idx - 1]);
                             as.copyOne(null);
-      if (nodes[2] != null) as.copyOne(null); // FIXME
+      if (nodes[2] != null) as.copyOne(rightChanged ? null : _addresses[idx + 1]);
       as.copyAll(_addresses, idx + 2, _len);
 
       Stitch<ANode> cs = new Stitch(newCenter._children, 0);
@@ -321,9 +326,9 @@ public class Branch extends ANode {
       Stitch as = new Stitch(join._addresses, 0);
       as.copyAll(left._addresses, 0, left._len);
       as.copyAll(_addresses,      0, idx - 1);
-      if (nodes[0] != null) as.copyOne(null); // FIXME
+      if (nodes[0] != null) as.copyOne(leftChanged ? null : _addresses[idx - 1]);
                             as.copyOne(null);
-      if (nodes[2] != null) as.copyOne(null); // FIXME
+      if (nodes[2] != null) as.copyOne(rightChanged ? null : _addresses[idx + 1]);
       as.copyAll(_addresses, idx + 2, _len);
 
       Stitch<ANode> cs = new Stitch(join._children, 0);
@@ -351,9 +356,9 @@ public class Branch extends ANode {
 
       Stitch as = new Stitch(join._addresses, 0);
       as.copyAll(_addresses, 0, idx - 1);
-      if (nodes[0] != null) as.copyOne(null); // FIXME
+      if (nodes[0] != null) as.copyOne(leftChanged ? null : _addresses[idx - 1]);
                             as.copyOne(null);
-      if (nodes[2] != null) as.copyOne(null); // FIXME
+      if (nodes[2] != null) as.copyOne(rightChanged ? null : _addresses[idx + 1]);
       as.copyAll(_addresses,     idx + 2, _len);
       as.copyAll(right._addresses, 0, right._len);
 
@@ -393,9 +398,9 @@ public class Branch extends ANode {
       Stitch as = new Stitch(newCenter._addresses, 0);
       as.copyAll(left._addresses, newLeftLen, left._len);
       as.copyAll(_addresses, 0, idx - 1);
-      if (nodes[0] != null) as.copyOne(null); // FIXME
+      if (nodes[0] != null) as.copyOne(leftChanged ? null : _addresses[idx - 1]);
                             as.copyOne(null);
-      if (nodes[2] != null) as.copyOne(null); // FIXME
+      if (nodes[2] != null) as.copyOne(rightChanged ? null : _addresses[idx + 1]);
       as.copyAll(_addresses, idx + 2, _len);
 
       Stitch<ANode> cs = new Stitch(newCenter._children, 0);
@@ -431,9 +436,9 @@ public class Branch extends ANode {
 
       Stitch as = new Stitch(newCenter._addresses, 0);
       as.copyAll(_addresses, 0, idx - 1);
-      if (nodes[0] != null) as.copyOne(null); // FIXME
+      if (nodes[0] != null) as.copyOne(leftChanged ? null : _addresses[idx - 1]);
                             as.copyOne(null);
-      if (nodes[2] != null) as.copyOne(null); // FIXME
+      if (nodes[2] != null) as.copyOne(rightChanged ? null : _addresses[idx + 1]);
       as.copyAll(_addresses, idx + 2, _len);
       as.copyAll(right._addresses, 0, rightHead);
 
@@ -466,17 +471,16 @@ public class Branch extends ANode {
   }
 
   @Override
-  public void toString(StringBuilder sb, String indent) {
+  public void toString(StringBuilder sb, Object address, String indent) {
     sb.append(indent);
-    sb.append("Branch Len: " + _len + " ");
+    sb.append("Branch addr: " + address + " len: " + _len + " ");
     for (int i = 0; i < _len; ++i) {
       sb.append("\n");
-      sb.append(_addresses[i]).append(": ");
       ANode child = _children[i];
       if (child != null)
-        child.toString(sb, indent + "  ");
+        child.toString(sb, _addresses[i], indent + "  ");
       else
-        sb.append("<lazy> ");
+        sb.append(indent + "  " + _addresses[i] + ": <lazy> ");
     }
   }
 }

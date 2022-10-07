@@ -140,8 +140,7 @@
                           (nil? node)  0.0
                           (instance? Leaf node) 1.0
                           :else
-                          (let [len (.len node)
-                                children (take len)]
+                          (let [len (.len node)]
                             (/ (->> (.-_children ^Branch node) (take len) (map loaded-ratio) (reduce + 0))
                               len))))
         durable-ratio (fn durable-ratio [address ^ANode node]
@@ -149,8 +148,7 @@
                           (some? address)       1.0
                           (instance? Leaf node) 0.0
                           :else
-                          (let [len (.len node)
-                                children (take len)]
+                          (let [len (.len node)]
                             (/ (->>
                                  (map
                                    (fn [_ addr child]

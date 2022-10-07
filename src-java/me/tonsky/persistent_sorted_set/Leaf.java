@@ -220,8 +220,8 @@ public class Leaf extends ANode {
   }
 
   @Override
-  public void toString(StringBuilder sb, String indent) {
+  public void toString(StringBuilder sb, Object address, String indent) {
     sb.append(indent);
-    sb.append("Leaf   Len: " + _len + " ");
+    sb.append("Leaf   addr: " + address + " len: " + _len + " ");
   }
 }

@@ -59,6 +59,16 @@
   (let [{:keys [address storage]} (persist original)]
     (set/load RT/DEFAULT_COMPARATOR (wrap-storage storage) address)))
 
+(deftest test-lazy-remove
+  "Check that invalidating middle branch does not invalidates siblings"
+  (let [size 7000 ;; 3-4 branches
+        xs   (shuffle (range size))
+        set  (into (set/sorted-set) xs)]
+    (persist set)
+    (is (= 1.0 (:durable-ratio (set/stats set)))
+      (let [set' (disj set 3500)] ;; one of the middle branches
+        (is (< 0.99 (:durable-ratio (set/stats set'))))))))
+
 (deftest test-lazyness
   (let [size     1000000
         xs       (shuffle (range size))
