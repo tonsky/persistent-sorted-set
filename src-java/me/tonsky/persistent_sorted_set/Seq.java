@@ -32,7 +32,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
   }
 
   ANode child() {
-    assert _node instanceof Branch;
+    assert _node instanceof Branch : _node;
     return ((Branch) _node).child(_set._storage, _idx);
   }
 

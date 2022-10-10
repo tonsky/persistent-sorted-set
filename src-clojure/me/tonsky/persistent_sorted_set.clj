@@ -5,6 +5,7 @@
   (:require
     [me.tonsky.persistent-sorted-set.arrays :as arrays])
   (:import
+    [java.lang.ref SoftReference]
     [java.util Comparator Arrays]
     [java.util.concurrent.atomic AtomicBoolean]
     [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet]))
@@ -86,7 +87,7 @@
          edit      nil
          ->Leaf    (fn [keys]
                      (Leaf. (count keys) keys edit))
-         ->Branch  (fn [^"[Lme.tonsky.persistent_sorted_set.ANode;" children]
+         ->Branch  (fn [^objects children]
                      (Branch.
                        (count children)
                        ^objects (arrays/amap #(.maxKey ^ANode %) Object children)
@@ -97,7 +98,7 @@
        (case (count nodes)
          0 (PersistentSortedSet. cmp)
          1 (PersistentSortedSet. {} cmp nil storage (first nodes) len edit 0)
-         (recur (mapv ->Branch (split nodes (count nodes) ANode avg max))))))))
+         (recur (mapv ->Branch (split nodes (count nodes) Object avg max))))))))
 
 
 (defn from-sequential
@@ -139,6 +140,7 @@
                         (cond 
                           (nil? node)  0.0
                           (instance? Leaf node) 1.0
+                          (instance? SoftReference node) (loaded-ratio (.get ^SoftReference node))
                           :else
                           (let [len (.len node)]
                             (/ (->> (.-_children ^Branch node) (take len) (map loaded-ratio) (reduce + 0))
@@ -147,6 +149,7 @@
                         (cond 
                           (some? address)       1.0
                           (instance? Leaf node) 0.0
+                          (instance? SoftReference node) (durable-ratio (.get ^SoftReference node))
                           :else
                           (let [len (.len node)]
                             (/ (->>

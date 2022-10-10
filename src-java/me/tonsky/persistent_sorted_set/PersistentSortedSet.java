@@ -7,8 +7,8 @@ import clojure.lang.*;
 @SuppressWarnings("unchecked")
 public class PersistentSortedSet extends APersistentSortedSet implements IEditableCollection, ITransientSet, Reversible, Sorted, IReduce, IPersistentSortedSet {
 
-  public static ANode[] EARLY_EXIT = new ANode[0],
-                        UNCHANGED  = new ANode[0];
+  public static Object[] EARLY_EXIT = new Object[0],
+                         UNCHANGED  = new Object[0];
 
   public static int MIN_LEN = 32, MAX_LEN = 64, EXPAND_LEN = 8;
 
@@ -206,7 +206,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   }
 
   public PersistentSortedSet cons(Object key, Comparator cmp) {
-    ANode[] nodes = root().add(_storage, key, cmp, _edit);
+    Object[] nodes = root().add(_storage, key, cmp, _edit);
 
     if (UNCHANGED == nodes)
       return this;
@@ -214,11 +214,11 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     if (editable()) {
       if (1 == nodes.length) {
         _address = null;
-        _root = nodes[0];
+        _root = (ANode) nodes[0];
       } else if (2 == nodes.length) {
-        Object[] keys = new Object[] { nodes[0].maxKey(), nodes[1].maxKey() };
+        Object[] keys = new Object[] { ((ANode) nodes[0]).maxKey(), ((ANode) nodes[1]).maxKey() };
         _address = null;
-        _root = new Branch(2, keys, new Object[2], nodes, _edit);
+        _root = new Branch(2, keys, null, nodes, _edit);
       }
       _count = alterCount(1);
       _version += 1;
@@ -226,10 +226,10 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     }
 
     if (1 == nodes.length)
-      return new PersistentSortedSet(_meta, _cmp, null, _storage, nodes[0], alterCount(1), _edit, _version + 1);
+      return new PersistentSortedSet(_meta, _cmp, null, _storage, (ANode) nodes[0], alterCount(1), _edit, _version + 1);
     
-    Object[] keys = new Object[] { nodes[0].maxKey(), nodes[1].maxKey() };
-    ANode newRoot = new Branch(2, keys, new Object[2], nodes, _edit);
+    Object[] keys = new Object[] { ((ANode) nodes[0]).maxKey(), ((ANode) nodes[1]).maxKey() };
+    ANode newRoot = new Branch(2, keys, null, nodes, _edit);
     return new PersistentSortedSet(_meta, _cmp, null, _storage, newRoot, alterCount(1), _edit, _version + 1);
   }
 
@@ -239,7 +239,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   }
 
   public PersistentSortedSet disjoin(Object key, Comparator cmp) { 
-    ANode[] nodes = root().remove(_storage, key, null, null, cmp, _edit);
+    Object[] nodes = root().remove(_storage, key, null, null, cmp, _edit);
 
     // not in set
     if (UNCHANGED == nodes)
@@ -253,7 +253,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
       return this;
     }
 
-    ANode newRoot = nodes[1];
+    ANode newRoot = (ANode) nodes[1];
     if (editable()) {
       if (newRoot instanceof Branch && newRoot._len == 1)
         newRoot = ((Branch) newRoot).child(_storage, 0);

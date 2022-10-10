@@ -1,5 +1,6 @@
 package me.tonsky.persistent_sorted_set;
 
+import java.lang.ref.*;
 import java.util.*;
 import java.util.concurrent.atomic.*;
 
@@ -11,12 +12,13 @@ public class Branch extends ANode {
 
   // Optional, only in branches
   // Only valid [0 ... _len-1]
-  public ANode[] _children;
+  public Object[] _children;
 
-  public Branch(int len, Object[] keys, Object[] addresses, ANode[] children, AtomicBoolean edit) {
+  public Branch(int len, Object[] keys, Object[] addresses, Object[] children, AtomicBoolean edit) {
     super(len, keys, edit);
-    assert addresses == null || addresses.length >= len;
+    assert addresses == null || addresses.length >= len : ("addresses = " + Arrays.toString(addresses) + ", len = " + len);
     assert children == null || children.length >= len;
+
     _addresses = addresses;
     _children  = children;
   }
@@ -29,15 +31,22 @@ public class Branch extends ANode {
 
   public ANode child(IStorage storage, int idx) {
     assert 0 <= idx && idx < _len;
+    assert (_children != null && _children[idx] != null) || (_addresses != null && _addresses[idx] != null);
+
     ANode child = null;
     if (_children != null) {
-      child = _children[idx];
+      Object ref = _children[idx];
+      if (ref instanceof SoftReference) {
+        child = (ANode) ((SoftReference) ref).get();
+      } else {
+        child = (ANode) ref;
+      }
     }
+
     if (child == null) {
-      assert _addresses != null;
-      assert _addresses[idx] != null;
       child = storage.load(_addresses[idx]);
-      ensureChildren()[idx] = child;
+      ensureChildren()[idx] = new SoftReference<ANode>(child);
+      // ensureChildren()[idx] = child;
     }
     return child;
   }
@@ -74,6 +83,9 @@ public class Branch extends ANode {
     if (_addresses != null || address != null) {
       ensureAddresses();
       _addresses[idx] = address;
+      if (_children[idx] instanceof ANode) {
+        _children[idx] = new SoftReference(_children[idx]);
+      }
     }
     return address;
   }
@@ -85,9 +97,9 @@ public class Branch extends ANode {
     return _addresses;
   }
 
-  protected ANode[] ensureChildren() {
+  protected Object[] ensureChildren() {
     if (_children == null) {
-      _children = new ANode[_keys.length];
+      _children = new Object[_keys.length];
     }
     return _children;
   }
@@ -103,7 +115,7 @@ public class Branch extends ANode {
   }
 
   @Override
-  public ANode[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit) {
+  public Object[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit) {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
@@ -111,7 +123,7 @@ public class Branch extends ANode {
     int ins = -idx - 1;
     if (ins == _len) ins = _len - 1;
     assert 0 <= ins && ins < _len;
-    ANode[] nodes = child(storage, ins).add(storage, key, cmp, edit);
+    Object[] nodes = child(storage, ins).add(storage, key, cmp, edit);
 
     if (PersistentSortedSet.UNCHANGED == nodes) // child signalling already in set
       return PersistentSortedSet.UNCHANGED;
@@ -122,19 +134,19 @@ public class Branch extends ANode {
     
     // same len, editable
     if (1 == nodes.length && editable()) {
-      ANode node = nodes[0];
+      ANode node = (ANode) nodes[0];
       _keys[ins] = node.maxKey();
       address(ins, null);
       child(ins, node);
       if (ins == _len - 1 && node.maxKey() == maxKey()) // TODO why maxKey check?
-        return new ANode[]{this}; // update maxKey
+        return new Object[]{this}; // update maxKey
       else
         return PersistentSortedSet.EARLY_EXIT;
     }
 
     // same len, not editable
     if (1 == nodes.length) {
-      ANode node = nodes[0];
+      ANode node = (ANode) nodes[0];
       Object[] newKeys;
       if (0 == cmp.compare(node.maxKey(), _keys[ins])) {
         newKeys = _keys;
@@ -144,7 +156,7 @@ public class Branch extends ANode {
       }
 
       Object[] newAddresses = null;
-      ANode[] newChildren = null;
+      Object[] newChildren = null;
       if (node == child(storage, ins)) { // TODO how is this possible?
         newAddresses = _addresses;
         newChildren = _children;
@@ -154,11 +166,11 @@ public class Branch extends ANode {
           newAddresses[ins] = null;
         }
 
-        newChildren = _children == null ? new ANode[_keys.length] : Arrays.copyOfRange(_children, 0, _len);
+        newChildren = _children == null ? new Object[_keys.length] : Arrays.copyOfRange(_children, 0, _len);
         newChildren[ins] = node;
       }
 
-      return new ANode[]{new Branch(_len, newKeys, newAddresses, newChildren, edit)};
+      return new Object[]{new Branch(_len, newKeys, newAddresses, newChildren, edit)};
     }
 
     // len + 1
@@ -166,8 +178,8 @@ public class Branch extends ANode {
       Branch n = new Branch(_len + 1, edit);
       new Stitch(n._keys, 0)
         .copyAll(_keys, 0, ins)
-        .copyOne(nodes[0].maxKey())
-        .copyOne(nodes[1].maxKey())
+        .copyOne(((ANode) nodes[0]).maxKey())
+        .copyOne(((ANode) nodes[1]).maxKey())
         .copyAll(_keys, ins + 1, _len);
 
       if (_addresses != null) {
@@ -186,7 +198,7 @@ public class Branch extends ANode {
         .copyOne(nodes[1])
         .copyAll(_children, ins + 1, _len);
 
-      return new ANode[]{n};
+      return new Object[]{n};
     }
 
     // split
@@ -199,8 +211,8 @@ public class Branch extends ANode {
       Object[] keys1 = new Object[half1];
       new Stitch(keys1, 0)
         .copyAll(_keys, 0, ins)
-        .copyOne(nodes[0].maxKey())
-        .copyOne(nodes[1].maxKey())
+        .copyOne(((ANode) nodes[0]).maxKey())
+        .copyOne(((ANode) nodes[1]).maxKey())
         .copyAll(_keys, ins+1, half1-1);
       Object[] keys2 = new Object[half2];
       ArrayUtil.copy(_keys, half1 - 1, _len, keys2, 0);
@@ -218,19 +230,19 @@ public class Branch extends ANode {
         ArrayUtil.copy(_addresses, half1 - 1, _len, addresses2, 0);
       }
 
-      ANode[] children1 = new ANode[half1];
-      ANode[] children2 = null;
+      Object[] children1 = new Object[half1];
+      Object[] children2 = null;
       new Stitch(children1, 0)
         .copyAll(_children, 0, ins)
         .copyOne(nodes[0])
         .copyOne(nodes[1])
         .copyAll(_children, ins + 1, half1 - 1);
       if (_children != null) {
-        children2 = new ANode[half2];
+        children2 = new Object[half2];
         ArrayUtil.copy(_children, half1 - 1, _len, children2, 0);
       }
 
-      return new ANode[] {
+      return new Object[] {
         new Branch(half1, keys1, addresses1, children1, edit),
         new Branch(half2, keys2, addresses2, children2, edit)
       };
@@ -243,8 +255,8 @@ public class Branch extends ANode {
 
     new Stitch(keys2, 0)
       .copyAll(_keys, half1, ins)
-      .copyOne(nodes[0].maxKey())
-      .copyOne(nodes[1].maxKey())
+      .copyOne(((ANode) nodes[0]).maxKey())
+      .copyOne(((ANode) nodes[1]).maxKey())
       .copyAll(_keys, ins + 1, _len);
 
     Object addresses1[] = null;
@@ -260,10 +272,10 @@ public class Branch extends ANode {
         .copyAll(_addresses, ins + 1, _len);
     }
 
-    ANode[] children1 = null;
-    ANode[] children2 = new ANode[half2];
+    Object[] children1 = null;
+    Object[] children2 = new Object[half2];
     if (_children != null) {
-      children1 = new ANode[half1];
+      children1 = new Object[half1];
       ArrayUtil.copy(_children, 0, half1, children1, 0);
     }
     new Stitch(children2, 0)
@@ -272,14 +284,14 @@ public class Branch extends ANode {
       .copyOne(nodes[1])
       .copyAll(_children, ins + 1, _len);
 
-    return new ANode[]{
+    return new Object[]{
       new Branch(half1, keys1, addresses1, children1, edit),
       new Branch(half2, keys2, addresses2, children2, edit)
     };
   }
 
   @Override
-  public ANode[] remove(IStorage storage, Object key, ANode _left, ANode _right, Comparator cmp, AtomicBoolean edit) {
+  public Object[] remove(IStorage storage, Object key, ANode _left, ANode _right, Comparator cmp, AtomicBoolean edit) {
     Branch left = (Branch) _left;
     Branch right = (Branch) _right;
 
@@ -295,7 +307,7 @@ public class Branch extends ANode {
           rightChild = idx < _len-1 ? child(storage, idx + 1) : null;
     int leftChildLen = safeLen(leftChild);
     int rightChildLen = safeLen(rightChild);
-    ANode[] nodes = child(storage, idx).remove(storage, key, leftChild, rightChild, cmp, edit);
+    Object[] nodes = child(storage, idx).remove(storage, key, leftChild, rightChild, cmp, edit);
 
     if (PersistentSortedSet.UNCHANGED == nodes) // child signalling element not in set
       return PersistentSortedSet.UNCHANGED;
@@ -304,8 +316,8 @@ public class Branch extends ANode {
       return PersistentSortedSet.EARLY_EXIT;
     }
 
-    boolean leftChanged = leftChild != nodes[0] || leftChildLen != safeLen(nodes[0]);
-    boolean rightChanged = rightChild != nodes[2] || rightChildLen != safeLen(nodes[2]);
+    boolean leftChanged = leftChild != nodes[0] || leftChildLen != safeLen((ANode) nodes[0]);
+    boolean rightChanged = rightChild != nodes[2] || rightChildLen != safeLen((ANode) nodes[2]);
 
     // nodes[1] always not nil
     int newLen = _len - 1
@@ -319,10 +331,10 @@ public class Branch extends ANode {
     if (newLen >= PersistentSortedSet.MIN_LEN || (left == null && right == null)) {
       // can update in place
       if (editable() && idx < _len-2) {
-        Stitch<Object> ks = new Stitch(_keys, Math.max(idx-1, 0));
-        if (nodes[0] != null) ks.copyOne(nodes[0].maxKey());
-                              ks.copyOne(nodes[1].maxKey());
-        if (nodes[2] != null) ks.copyOne(nodes[2].maxKey());
+        Stitch ks = new Stitch(_keys, Math.max(idx-1, 0));
+        if (nodes[0] != null) ks.copyOne(((ANode) nodes[0]).maxKey());
+                              ks.copyOne(((ANode) nodes[1]).maxKey());
+        if (nodes[2] != null) ks.copyOne(((ANode) nodes[2]).maxKey());
         if (newLen != _len)
           ks.copyAll(_keys, idx+2, _len);
 
@@ -336,7 +348,7 @@ public class Branch extends ANode {
         }
 
         ensureChildren();
-        Stitch<ANode> cs = new Stitch(_children, Math.max(idx - 1, 0));
+        Stitch cs = new Stitch(_children, Math.max(idx - 1, 0));
         if (nodes[0] != null) cs.copyOne(nodes[0]);
                               cs.copyOne(nodes[1]);
         if (nodes[2] != null) cs.copyOne(nodes[2]);
@@ -349,11 +361,11 @@ public class Branch extends ANode {
 
       Branch newCenter = new Branch(newLen, edit);
 
-      Stitch<Object> ks = new Stitch(newCenter._keys, 0);
+      Stitch ks = new Stitch(newCenter._keys, 0);
       ks.copyAll(_keys, 0, idx - 1);
-      if (nodes[0] != null) ks.copyOne(nodes[0].maxKey());
-                            ks.copyOne(nodes[1].maxKey());
-      if (nodes[2] != null) ks.copyOne(nodes[2].maxKey());
+      if (nodes[0] != null) ks.copyOne(((ANode) nodes[0]).maxKey());
+                            ks.copyOne(((ANode) nodes[1]).maxKey());
+      if (nodes[2] != null) ks.copyOne(((ANode) nodes[2]).maxKey());
       ks.copyAll(_keys, idx + 2, _len);
 
       if (_addresses != null) {
@@ -366,26 +378,26 @@ public class Branch extends ANode {
       }
 
       newCenter.ensureChildren();
-      Stitch<ANode> cs = new Stitch(newCenter._children, 0);
+      Stitch cs = new Stitch(newCenter._children, 0);
       cs.copyAll(_children, 0, idx - 1);
       if (nodes[0] != null) cs.copyOne(nodes[0]);
                             cs.copyOne(nodes[1]);
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children, idx + 2, _len);
 
-      return new ANode[] { left, newCenter, right };
+      return new Object[] { left, newCenter, right };
     }
 
     // can join with left
     if (left != null && left._len + newLen <= PersistentSortedSet.MAX_LEN) {
       Branch join = new Branch(left._len + newLen, edit);
 
-      Stitch<Object> ks = new Stitch(join._keys, 0);
+      Stitch ks = new Stitch(join._keys, 0);
       ks.copyAll(left._keys, 0, left._len);
       ks.copyAll(_keys,      0, idx - 1);
-      if (nodes[0] != null) ks.copyOne(nodes[0].maxKey());
-                            ks.copyOne(nodes[1].maxKey());
-      if (nodes[2] != null) ks.copyOne(nodes[2].maxKey());
+      if (nodes[0] != null) ks.copyOne(((ANode) nodes[0]).maxKey());
+                            ks.copyOne(((ANode) nodes[1]).maxKey());
+      if (nodes[2] != null) ks.copyOne(((ANode) nodes[2]).maxKey());
       ks.copyAll(_keys,     idx + 2, _len);
 
       if (left._addresses != null || _addresses != null) {
@@ -399,7 +411,7 @@ public class Branch extends ANode {
       }
 
       join.ensureChildren();
-      Stitch<ANode> cs = new Stitch(join._children, 0);
+      Stitch cs = new Stitch(join._children, 0);
       cs.copyAll(left._children, 0, left._len);
       cs.copyAll(_children,      0, idx - 1);
       if (nodes[0] != null) cs.copyOne(nodes[0]);
@@ -407,18 +419,18 @@ public class Branch extends ANode {
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children, idx + 2, _len);
 
-      return new ANode[] { null, join, right };
+      return new Object[] { null, join, right };
     }
 
     // can join with right
     if (right != null && newLen + right._len <= PersistentSortedSet.MAX_LEN) {
       Branch join = new Branch(newLen + right._len, edit);
 
-      Stitch<Object> ks = new Stitch(join._keys, 0);
+      Stitch ks = new Stitch(join._keys, 0);
       ks.copyAll(_keys, 0, idx - 1);
-      if (nodes[0] != null) ks.copyOne(nodes[0].maxKey());
-                            ks.copyOne(nodes[1].maxKey());
-      if (nodes[2] != null) ks.copyOne(nodes[2].maxKey());
+      if (nodes[0] != null) ks.copyOne(((ANode) nodes[0]).maxKey());
+                            ks.copyOne(((ANode) nodes[1]).maxKey());
+      if (nodes[2] != null) ks.copyOne(((ANode) nodes[2]).maxKey());
       ks.copyAll(_keys,       idx + 2, _len);
       ks.copyAll(right._keys, 0, right._len);
 
@@ -433,7 +445,7 @@ public class Branch extends ANode {
       }
 
       join.ensureChildren();
-      Stitch<ANode> cs = new Stitch(join._children, 0);
+      Stitch cs = new Stitch(join._children, 0);
       cs.copyAll(_children, 0, idx - 1);
       if (nodes[0] != null) cs.copyOne(nodes[0]);
                             cs.copyOne(nodes[1]);
@@ -441,7 +453,7 @@ public class Branch extends ANode {
       cs.copyAll(_children,     idx + 2, _len);
       cs.copyAll(right._children, 0, right._len);
       
-      return new ANode[] { left, join, null };
+      return new Object[] { left, join, null };
     }
 
     // borrow from left
@@ -455,12 +467,12 @@ public class Branch extends ANode {
 
       ArrayUtil.copy(left._keys, 0, newLeftLen, newLeft._keys, 0);
 
-      Stitch<Object> ks = new Stitch(newCenter._keys, 0);
+      Stitch ks = new Stitch(newCenter._keys, 0);
       ks.copyAll(left._keys, newLeftLen, left._len);
       ks.copyAll(_keys, 0, idx - 1);
-      if (nodes[0] != null) ks.copyOne(nodes[0].maxKey());
-                            ks.copyOne(nodes[1].maxKey());
-      if (nodes[2] != null) ks.copyOne(nodes[2].maxKey());
+      if (nodes[0] != null) ks.copyOne(((ANode) nodes[0]).maxKey());
+                            ks.copyOne(((ANode) nodes[1]).maxKey());
+      if (nodes[2] != null) ks.copyOne(((ANode) nodes[2]).maxKey());
       ks.copyAll(_keys, idx + 2, _len);
 
       if (left._addresses != null) {
@@ -481,7 +493,7 @@ public class Branch extends ANode {
       }
 
       newCenter.ensureChildren();
-      Stitch<ANode> cs = new Stitch(newCenter._children, 0);
+      Stitch cs = new Stitch(newCenter._children, 0);
       cs.copyAll(left._children, newLeftLen, left._len);
       cs.copyAll(_children, 0, idx - 1);
       if (nodes[0] != null) cs.copyOne(nodes[0]);
@@ -489,7 +501,7 @@ public class Branch extends ANode {
       if (nodes[2] != null) cs.copyOne(nodes[2]);
       cs.copyAll(_children, idx + 2, _len);
 
-      return new ANode[] { newLeft, newCenter, right };
+      return new Object[] { newLeft, newCenter, right };
     }
 
     // borrow from right
@@ -502,11 +514,11 @@ public class Branch extends ANode {
       Branch newCenter = new Branch(newCenterLen, edit),
              newRight  = new Branch(newRightLen, edit);
 
-      Stitch<Object> ks = new Stitch(newCenter._keys, 0);
+      Stitch ks = new Stitch(newCenter._keys, 0);
       ks.copyAll(_keys, 0, idx - 1);
-      if (nodes[0] != null) ks.copyOne(nodes[0].maxKey());
-                            ks.copyOne(nodes[1].maxKey());
-      if (nodes[2] != null) ks.copyOne(nodes[2].maxKey());
+      if (nodes[0] != null) ks.copyOne(((ANode) nodes[0]).maxKey());
+                            ks.copyOne(((ANode) nodes[1]).maxKey());
+      if (nodes[2] != null) ks.copyOne(((ANode) nodes[2]).maxKey());
       ks.copyAll(_keys, idx + 2, _len);
       ks.copyAll(right._keys, 0, rightHead);
 
@@ -523,7 +535,7 @@ public class Branch extends ANode {
       }
 
       newCenter.ensureChildren();
-      Stitch<ANode> cs = new Stitch(newCenter._children, 0);
+      Stitch cs = new Stitch(newCenter._children, 0);
       cs.copyAll(_children, 0, idx - 1);
       if (nodes[0] != null) cs.copyOne(nodes[0]);
                             cs.copyOne(nodes[1]);
@@ -538,7 +550,7 @@ public class Branch extends ANode {
         ArrayUtil.copy(right._children, rightHead, right._len, newRight.ensureChildren(), 0);
       }
 
-      return new ANode[] { left, newCenter, newRight };
+      return new Object[] { left, newCenter, newRight };
     }
 
     throw new RuntimeException("Unreachable");
@@ -561,7 +573,17 @@ public class Branch extends ANode {
     sb.append("Branch addr: " + address + " len: " + _len + " ");
     for (int i = 0; i < _len; ++i) {
       sb.append("\n");
-      ANode child = _children == null ? null : _children[i];
+      ANode child = null;
+      if(_children == null) {
+        Object ref = _children[i];
+        if (ref != null) {
+          if (ref instanceof SoftReference) {
+            child = (ANode) ((SoftReference) ref).get();
+          } else {
+            child = (ANode) ref;
+          }
+        }
+      }
       if (child != null)
         child.toString(sb, address(i), indent + "  ");
       else

@@ -24,7 +24,7 @@ public class Leaf extends ANode {
   }
 
   @Override
-  public ANode[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit) {
+  public Object[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit) {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
@@ -37,7 +37,7 @@ public class Leaf extends ANode {
       if (ins == _len) {
         _keys[_len] = key;
         _len += 1;
-        return new ANode[]{this}; // maxKey needs updating
+        return new Object[]{this}; // maxKey needs updating
       } else {
         ArrayUtil.copy(_keys, ins, _len, _keys, ins+1);
         _keys[ins] = key;
@@ -53,7 +53,7 @@ public class Leaf extends ANode {
         .copyAll(_keys, 0, ins)
         .copyOne(key)
         .copyAll(_keys, ins, _len);
-      return new ANode[]{n};
+      return new Object[]{n};
     }
 
     // splitting
@@ -69,7 +69,7 @@ public class Leaf extends ANode {
         .copyOne(key)
         .copyAll(_keys, ins, half1 - 1);
       ArrayUtil.copy(_keys, half1 - 1, _len, n2._keys, 0);
-      return new ANode[]{n1, n2};
+      return new Object[]{n1, n2};
     }
 
     // copy first, insert to second
@@ -80,11 +80,11 @@ public class Leaf extends ANode {
       .copyAll(_keys, half1, ins)
       .copyOne(key)
       .copyAll(_keys, ins, _len);
-    return new ANode[]{n1, n2};
+    return new Object[]{n1, n2};
   }
 
   @Override
-  public ANode[] remove(IStorage storage, Object key, ANode _left, ANode _right, Comparator cmp, AtomicBoolean edit) {
+  public Object[] remove(IStorage storage, Object key, ANode _left, ANode _right, Comparator cmp, AtomicBoolean edit) {
     Leaf left = (Leaf) _left;
     Leaf right = (Leaf) _right;
 
@@ -102,7 +102,7 @@ public class Leaf extends ANode {
         ArrayUtil.copy(_keys, idx + 1, _len, _keys, idx);
         _len = newLen;
         if (idx == newLen) // removed last, need to signal new maxKey
-          return new ANode[]{left, this, right};
+          return new Object[]{left, this, right};
         return PersistentSortedSet.EARLY_EXIT;        
       }
 
@@ -111,7 +111,7 @@ public class Leaf extends ANode {
       new Stitch(center._keys, 0) 
         .copyAll(_keys, 0, idx)
         .copyAll(_keys, idx + 1, _len);
-      return new ANode[] { left, center, right };
+      return new Object[] { left, center, right };
     }
 
     // can join with left
@@ -121,7 +121,7 @@ public class Leaf extends ANode {
         .copyAll(left._keys, 0,       left._len)
         .copyAll(_keys,      0,       idx)
         .copyAll(_keys,      idx + 1, _len);
-      return new ANode[] { null, join, right };
+      return new Object[] { null, join, right };
     }
 
     // can join with right
@@ -131,7 +131,7 @@ public class Leaf extends ANode {
         .copyAll(_keys,       0,       idx)
         .copyAll(_keys,       idx + 1, _len)
         .copyAll(right._keys, 0,       right._len);
-      return new ANode[]{ left, join, null };
+      return new Object[]{ left, join, null };
     }
 
     // borrow from left
@@ -167,7 +167,7 @@ public class Leaf extends ANode {
         ArrayUtil.copy(left._keys, 0, newLeftLen, newLeft._keys, 0);
       }
 
-      return new ANode[]{ newLeft, newCenter, right };
+      return new Object[]{ newLeft, newCenter, right };
     }
 
     // borrow from right
@@ -204,7 +204,7 @@ public class Leaf extends ANode {
         ArrayUtil.copy(right._keys, rightHead, right._len, newRight._keys, 0);
       }
 
-      return new ANode[]{ left, newCenter, newRight };
+      return new Object[]{ left, newCenter, newRight };
     }
     throw new RuntimeException("Unreachable");
   }

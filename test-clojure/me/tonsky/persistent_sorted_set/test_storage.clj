@@ -32,27 +32,30 @@
          keys    (->> (.-_keys node) (take len) (into []))]
      (swap! *storage assoc address 
        (if (instance? Leaf node)
-         {:keys keys}
-         {:keys keys
+         {:type :leaf
+          :keys keys}
+         {:type :branch
+          :keys keys
           :addresses
           (mapv
-            (fn [idx child-address child]
+            (fn [idx child-address]
               (or child-address
                 (.address ^Branch node idx
-                  (persist *storage *stats child (inc depth)))))
+                  (persist *storage *stats (.child ^Branch node nil (int idx)) (inc depth)))))
             (range len)
-            (.-_addresses ^Branch node)
-            (.-_children ^Branch node))}))
+            (or (.-_addresses ^Branch node) (repeat len nil)))}))
      (swap! *stats update :writes inc)
      address)))
 
 (defn wrap-storage [storage]
   (reify IStorage
     (^ANode load [_ address]
-      (let [{:keys [keys addresses]} (storage address)
+      (let [{:keys [type keys addresses]} (storage address)
             len (count keys)]
-        (if addresses
-          (Branch. len (to-array keys) (to-array addresses) nil nil)
+        (case type
+          :branch
+          (Branch. len (to-array keys) (when addresses (to-array addresses)) nil nil)
+          :leaf
           (Leaf. len (to-array keys) nil))))))
 
 (defn lazy-load [original]
@@ -93,7 +96,7 @@
                              len (.len node)]
                          (doseq [i (range len)
                                  :let [addr   (nth (.-_addresses node) i)
-                                       child  (nth (.-_children node) i)
+                                       child  (.child node nil (int i))
                                        {:keys [keys addresses]} (get @*storage addr)]]
                            ;; nodes inside stored? has to ALL be stored
                            (when stored?

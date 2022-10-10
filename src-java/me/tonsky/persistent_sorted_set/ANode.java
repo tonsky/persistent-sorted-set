@@ -87,8 +87,8 @@ public abstract class ANode {
 
   public abstract int count(IStorage storage);
   public abstract boolean contains(IStorage storage, Object key, Comparator cmp);
-  public abstract ANode[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit);
-  public abstract ANode[] remove(IStorage storage, Object key, ANode left, ANode right, Comparator cmp, AtomicBoolean edit);
+  public abstract Object[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit);
+  public abstract Object[] remove(IStorage storage, Object key, ANode left, ANode right, Comparator cmp, AtomicBoolean edit);
   public abstract String str(IStorage storage, int lvl);
   public abstract void toString(StringBuilder sb, Object address, String indent);
 
