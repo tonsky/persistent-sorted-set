@@ -12,7 +12,9 @@ public class Stitch<T> {
 
   public Stitch copyAll(T[] source, int from, int to) {
     if (to >= from) {
-      System.arraycopy(source, from, target, offset, to - from);
+      if (source != null) {
+        System.arraycopy(source, from, target, offset, to - from);
+      }
       offset += to - from;
     }
     return this;

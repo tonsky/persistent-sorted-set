@@ -21,7 +21,7 @@
    (let [*storage (atom storage)
          *stats   (atom {:writes 0})
          address  (or (.-_address set)
-                    (.onPersist set
+                    (.address set
                       (persist *storage *stats (.-_root set) 0)))]
      {:address address
       :storage @*storage
@@ -38,7 +38,7 @@
           (mapv
             (fn [idx child-address child]
               (or child-address
-                (.onPersist ^Branch node idx
+                (.address ^Branch node idx
                   (persist *storage *stats child (inc depth)))))
             (range len)
             (.-_addresses ^Branch node)
