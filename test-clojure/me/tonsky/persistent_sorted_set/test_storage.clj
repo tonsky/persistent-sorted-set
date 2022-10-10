@@ -69,53 +69,65 @@
       (let [set' (disj set 3500)] ;; one of the middle branches
         (is (< 0.99 (:durable-ratio (set/stats set'))))))))
 
+(defmacro dobatches [[sym coll] & body]
+  `(loop [coll# ~coll]
+     (when (seq coll#)
+       (let [batch# (rand-nth [1 2 3 4 5 10 20 30 40 50 100])
+             [~sym tail#] (split-at batch# coll#)]
+         ~@body
+         (recur tail#)))))
+
 (deftest stresstest-stable-addresses
-  (let [size      100000
-        batch     100
+  (let [size      10000
         adds      (shuffle (range size))
         removes   (shuffle adds)
         *set      (atom (set/sorted-set))
         *storage  (atom {})
-        invariant (fn invariant [o]
-                    (condp instance? o
-                      PersistentSortedSet
-                      (invariant (.-_root ^PersistentSortedSet o))
-                      
-                      Branch
-                      (let [node ^Branch o
-                            len (.len node)]
-                        (doseq [i (range len)
-                                :let [addr   (nth (.-_addresses node) i)
-                                      child  (nth (.-_children node) i)
-                                      {:keys [keys addresses]} (get @*storage addr)] 
-                                :when (some? addr)]
-                          (testing addr
-                            (is (= keys 
-                                  (take (.len ^ANode child) (.-_keys ^ANode child))))
-                            (is (= addresses
-                                  (when (instance? Branch child)
-                                    (take (.len ^Branch child) (.-_addresses ^Branch child)))))
-                            (invariant child))))
-                      
-                      Leaf
-                      true))]
+        invariant (fn invariant 
+                    ([o]
+                     (invariant (.-_root ^PersistentSortedSet o) (some? (.-_address ^PersistentSortedSet o))))
+                    ([o stored?]
+                     (condp instance? o
+                       Branch
+                       (let [node ^Branch o
+                             len (.len node)]
+                         (doseq [i (range len)
+                                 :let [addr   (nth (.-_addresses node) i)
+                                       child  (nth (.-_children node) i)
+                                       {:keys [keys addresses]} (get @*storage addr)]]
+                           ;; nodes inside stored? has to ALL be stored
+                           (when stored?
+                             (is (some? addr)))
+                           (when (some? addr)
+                             (is (= keys 
+                                   (take (.len ^ANode child) (.-_keys ^ANode child))))
+                             (is (= addresses
+                                   (when (instance? Branch child)
+                                     (take (.len ^Branch child) (.-_addresses ^Branch child))))))
+                           (invariant child (some? addr))))
+                        
+                       Leaf
+                       true)))]
+    
     (testing "Persist after each"
-      (doseq [xs (partition-all batch adds)
-              :let [set' (swap! *set into xs)]]
-        (invariant set')
-        (reset! *storage (:storage (persist @*storage set'))))
+      (dobatches [xs adds]
+        (let [set' (swap! *set into xs)]
+          (invariant set')
+          (reset! *storage (:storage (persist @*storage set')))))
+      
       (invariant @*set)
-      (doseq [xs (partition-all batch removes)
-              :let [set' (swap! *set #(reduce disj % xs))]]
-        (invariant set')
-        (reset! *storage (:storage (persist @*storage set')))))
+      
+      (dobatches [xs removes]
+        (let [set' (swap! *set #(reduce disj % xs))]
+          (invariant set')
+          (reset! *storage (:storage (persist @*storage set'))))))
     
     (testing "Persist once"
       (reset! *set (into (set/sorted-set) adds))
       (reset! *storage (:storage (persist @*set)))
-      (doseq [xs (partition-all batch removes)
-              :let [set' (swap! *set #(reduce disj % xs))]]
-        (invariant set')))))
+      (dobatches [xs removes]
+        (let [set' (swap! *set #(reduce disj % xs))]
+          (invariant set'))))))
     
 (deftest test-lazyness
   (let [size     1000000
