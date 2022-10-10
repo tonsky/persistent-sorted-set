@@ -5,7 +5,8 @@
  {:dev
   {:extra-deps
    {nrepl/nrepl {:mvn/version "1.0.0"}}
-   :extra-paths ["test-clojure" "dev"]}
+   :extra-paths ["test-clojure" "dev"]
+   :jvm-opts ["-ea"]}
   :bench
   {:extra-deps
    {com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.0"}

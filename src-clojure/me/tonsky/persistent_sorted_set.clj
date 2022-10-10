@@ -90,7 +90,7 @@
                      (Branch.
                        (count children)
                        ^objects (arrays/amap #(.maxKey ^ANode %) Object children)
-                       (object-array (count children))
+                       nil
                        children
                        edit))]
      (loop [nodes (mapv ->Leaf (split keys len Object avg max))]

@@ -52,7 +52,7 @@
       (let [{:keys [keys addresses]} (storage address)
             len (count keys)]
         (if addresses
-          (Branch. len (to-array keys) (to-array addresses) (make-array ANode len) nil)
+          (Branch. len (to-array keys) (to-array addresses) nil nil)
           (Leaf. len (to-array keys) nil))))))
 
 (defn lazy-load [original]
