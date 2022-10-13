@@ -24,7 +24,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   public int _count;
   public int _version;
   public final AtomicBoolean _edit;
-  public final IStorage _storage;
+  public IStorage _storage;
 
   public PersistentSortedSet() {
     this(null, RT.DEFAULT_COMPARATOR);
@@ -145,6 +145,14 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
         }
       }
     }
+  }
+
+  public Object store(IStorage storage) {
+    _storage = storage;
+    if (_address == null) {
+      address(_root.store(storage));
+    }
+    return _address;
   }
 
   public String toString() {

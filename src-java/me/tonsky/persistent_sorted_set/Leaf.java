@@ -208,6 +208,12 @@ public class Leaf extends ANode {
     }
     throw new RuntimeException("Unreachable");
   }
+  
+  @Override
+  public Object store(IStorage storage) {
+    Object[] keys = _len == _keys.length ? _keys : Arrays.copyOfRange(_keys, 0, _len);
+    return storage.store(keys, null);
+  }
 
   @Override
   public String str(IStorage storage, int lvl) {

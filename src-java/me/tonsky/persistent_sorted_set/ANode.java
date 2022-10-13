@@ -77,6 +77,14 @@ public abstract class ANode {
     }
     return low - 1;
   }
+
+  public static ANode restore(Object[] keys, Object[] addresses) {
+    if (addresses == null) {
+      return new Leaf(keys.length, keys, null);
+    } else {
+      return new Branch(keys.length, keys, addresses, null, null);
+    }
+  }
   
   @Override
   public String toString() {
@@ -89,6 +97,7 @@ public abstract class ANode {
   public abstract boolean contains(IStorage storage, Object key, Comparator cmp);
   public abstract Object[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit);
   public abstract Object[] remove(IStorage storage, Object key, ANode left, ANode right, Comparator cmp, AtomicBoolean edit);
+  public abstract Object store(IStorage storage);
   public abstract String str(IStorage storage, int lvl);
   public abstract void toString(StringBuilder sb, Object address, String indent);
 

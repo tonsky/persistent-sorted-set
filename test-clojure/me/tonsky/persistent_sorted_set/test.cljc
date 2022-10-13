@@ -342,7 +342,7 @@
           xs-rm     (reduce disj (into (sorted-set) xs) rm)]
       (doseq [[method set0] [["conj" (into (set/sorted-set) xs)]
                              ["bulk" (apply set/sorted-set xs)]
-                             #?(:clj ["lazy" (test-storage/lazy-load (into (set/sorted-set) xs))])]
+                             #?(:clj ["lazy" (test-storage/roundtrip (into (set/sorted-set) xs))])]
               :let [set1 (reduce disj set0 rm)
                     set2 (persistent! (reduce disj (transient set0) rm))
                     set3 (reduce disj set0 full-rm)
@@ -383,7 +383,7 @@
           [from to] (sort [(- 10000 (rand-int 20000)) (+ 10000 (rand-int 20000))])
           expected  (filter #(<= from % to) xs-sorted)]
       (doseq [[method set] [["conj" (into (set/sorted-set) xs)]
-                            #?(:clj ["lazy" (test-storage/lazy-load (into (set/sorted-set) xs))])]
+                            #?(:clj ["lazy" (test-storage/roundtrip (into (set/sorted-set) xs))])]
               :let [set-range (set/slice set from to)]]
         (println
           "Iter:" (str (inc i) "/" iters)

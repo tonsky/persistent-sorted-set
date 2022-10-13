@@ -556,6 +556,22 @@ public class Branch extends ANode {
     throw new RuntimeException("Unreachable");
   }
 
+  @Override
+  public Object store(IStorage storage) {
+    ensureAddresses();
+    for (int i = 0; i < _len; ++i) {
+      if (_addresses[i] == null) {
+        assert _children != null;
+        assert _children[i] != null;
+        assert _children[i] instanceof ANode;
+        address(i, ((ANode) _children[i]).store(storage));
+      }
+    }
+    Object[] keys = _len == _keys.length ? _keys : Arrays.copyOfRange(_keys, 0, _len);
+    Object[] addresses = _len == _addresses.length ? _addresses : Arrays.copyOfRange(_addresses, 0, _len);
+    return storage.store(keys, addresses);
+  }
+
   public String str(IStorage storage, int lvl) {
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < _len; ++i) {

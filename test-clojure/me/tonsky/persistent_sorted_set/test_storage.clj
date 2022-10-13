@@ -10,64 +10,50 @@
 
 (set! *warn-on-reflection* true)
 
-(defn gen-addr [depth]
+(defn gen-addr []
   #_(random-uuid)
-  (str depth "-" (str/join (repeatedly 10 #(rand-nth "ABCDEFGHIJKLMNOPQRSTUVWXYZ")))))
+  (str (str/join (repeatedly 10 #(rand-nth "ABCDEFGHIJKLMNOPQRSTUVWXYZ")))))
 
-(defn persist
-  ([^PersistentSortedSet set]
-   (persist {} set))
-  ([storage ^PersistentSortedSet set]
-   (let [*storage (atom storage)
-         *stats   (atom {:writes 0})
-         address  (or (.-_address set)
-                    (.address set
-                      (persist *storage *stats (.-_root set) 0)))]
-     {:address address
-      :storage @*storage
-      :stats   @*stats}))
-  ([*storage *stats ^ANode node depth]
-   (let [address (gen-addr depth)
-         len     (.len node)
-         keys    (->> (.-_keys node) (take len) (into []))]
-     (swap! *storage assoc address 
-       (if (instance? Leaf node)
-         {:type :leaf
-          :keys keys}
-         {:type :branch
-          :keys keys
-          :addresses
-          (mapv
-            (fn [idx child-address]
-              (or child-address
-                (.address ^Branch node idx
-                  (persist *storage *stats (.child ^Branch node nil (int idx)) (inc depth)))))
-            (range len)
-            (or (.-_addresses ^Branch node) (repeat len nil)))}))
-     (swap! *stats update :writes inc)
-     address)))
+(def ^:dynamic *stats*
+  nil)
 
-(defn wrap-storage [storage]
-  (reify IStorage
-    (^ANode load [_ address]
-      (let [{:keys [type keys addresses]} (storage address)
-            len (count keys)]
-        (case type
-          :branch
-          (Branch. len (to-array keys) (when addresses (to-array addresses)) nil nil)
-          :leaf
-          (Leaf. len (to-array keys) nil))))))
+(defn store [^PersistentSortedSet set ^IStorage storage]
+  (.store set storage))
 
-(defn lazy-load [original]
-  (let [{:keys [address storage]} (persist original)]
-    (set/load RT/DEFAULT_COMPARATOR (wrap-storage storage) address)))
+(defn restore [^IStorage storage address]
+  (set/load RT/DEFAULT_COMPARATOR storage address))
+
+(defrecord Storage [*storage]
+  IStorage
+  (load [_ address]
+    (let [{:keys [keys addresses]} (@*storage address)]
+      (ANode/restore (to-array keys) (some-> addresses to-array))))
+  (store [_ keys addresses]
+    (when *stats*
+      (swap! *stats* update :writes inc))
+    (let [address (gen-addr)]
+      (swap! *storage assoc address
+        {:keys      (vec keys)
+         :addresses (some-> addresses vec)})
+      address)))
+
+(defn make-storage
+  ([]
+   (->Storage (atom {})))
+  ([*storage]
+   (->Storage *storage)))
+
+(defn roundtrip [set]
+  (let [storage (make-storage)
+        address (store set storage)]
+    (restore storage address)))
 
 (deftest test-lazy-remove
   "Check that invalidating middle branch does not invalidates siblings"
   (let [size 7000 ;; 3-4 branches
         xs   (shuffle (range size))
         set  (into (set/sorted-set) xs)]
-    (persist set)
+    (store set (make-storage))
     (is (= 1.0 (:durable-ratio (set/stats set)))
       (let [set' (disj set 3500)] ;; one of the middle branches
         (is (< 0.99 (:durable-ratio (set/stats set'))))))))
@@ -85,7 +71,7 @@
         adds      (shuffle (range size))
         removes   (shuffle adds)
         *set      (atom (set/sorted-set))
-        *storage  (atom {})
+        storage   (make-storage)
         invariant (fn invariant 
                     ([o]
                      (invariant (.-_root ^PersistentSortedSet o) (some? (.-_address ^PersistentSortedSet o))))
@@ -97,7 +83,7 @@
                          (doseq [i (range len)
                                  :let [addr   (nth (.-_addresses node) i)
                                        child  (.child node nil (int i))
-                                       {:keys [keys addresses]} (get @*storage addr)]]
+                                       {:keys [keys addresses]} (-> storage :*storage deref (get addr))]]
                            ;; nodes inside stored? has to ALL be stored
                            (when stored?
                              (is (some? addr)))
@@ -116,18 +102,18 @@
       (dobatches [xs adds]
         (let [set' (swap! *set into xs)]
           (invariant set')
-          (reset! *storage (:storage (persist @*storage set')))))
+          (store set' storage)))
       
       (invariant @*set)
       
       (dobatches [xs removes]
         (let [set' (swap! *set #(reduce disj % xs))]
           (invariant set')
-          (reset! *storage (:storage (persist @*storage set'))))))
+          (store set' storage))))
     
     (testing "Persist once"
       (reset! *set (into (set/sorted-set) adds))
-      (reset! *storage (:storage (persist @*set)))
+      (store @*set storage)
       (dobatches [xs removes]
         (let [set' (swap! *set #(reduce disj % xs))]
           (invariant set'))))))
@@ -138,11 +124,14 @@
         rm       (vec (repeatedly (quot size 5) #(rand-nth xs)))
         original (-> (reduce disj (into (set/sorted-set) xs) rm)
                    (disj (quot size 4) (quot size 2)))
-        {:keys [address storage stats]} (persist original)
-        _       (is (> (:writes stats) (/ size PersistentSortedSet/MAX_LEN)))
-        loaded  (set/load RT/DEFAULT_COMPARATOR (wrap-storage storage) address)
-        _       (is (= 0.0 (:loaded-ratio (set/stats loaded))))
-        _       (is (= 1.0 (:durable-ratio (set/stats loaded))))
+        *stats   (atom {:writes 0})
+        storage  (make-storage)
+        address  (binding [*stats* *stats]
+                   (store original storage))
+        _        (is (> (:writes @*stats) (/ size PersistentSortedSet/MAX_LEN)))
+        loaded   (restore storage address)
+        _        (is (= 0.0 (:loaded-ratio (set/stats loaded))))
+        _        (is (= 1.0 (:durable-ratio (set/stats loaded))))
                 
         ; touch first 100
         _       (is (= (take 100 loaded) (take 100 original)))
@@ -205,8 +194,10 @@
         _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
         
         ; incremental persist
-        {stats' :stats} (persist storage loaded')
-        _       (is (< (:writes stats') 350)) ;; ~ 10000 / 32 + 10000 / 32 / 32 + 1
+        *stats' (atom {:writes 0})
+        _       (binding [*stats* *stats']
+                  (store loaded' storage))
+        _       (is (< (:writes @*stats') 350)) ;; ~ 10000 / 32 + 10000 / 32 / 32 + 1
         _       (is (= lprep (:loaded-ratio (set/stats loaded'))))
         _       (is (= 1.0 (:durable-ratio (set/stats loaded'))))
     
