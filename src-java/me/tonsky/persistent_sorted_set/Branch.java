@@ -3,6 +3,7 @@ package me.tonsky.persistent_sorted_set;
 import java.lang.ref.*;
 import java.util.*;
 import java.util.concurrent.atomic.*;
+import java.util.function.*;
 
 @SuppressWarnings("unchecked")
 public class Branch extends ANode {
@@ -46,7 +47,6 @@ public class Branch extends ANode {
     if (child == null) {
       child = storage.load(_addresses[idx]);
       ensureChildren()[idx] = new SoftReference<ANode>(child);
-      // ensureChildren()[idx] = child;
     }
     return child;
   }
@@ -570,6 +570,14 @@ public class Branch extends ANode {
     Object[] keys = _len == _keys.length ? _keys : Arrays.copyOfRange(_keys, 0, _len);
     Object[] addresses = _len == _addresses.length ? _addresses : Arrays.copyOfRange(_addresses, 0, _len);
     return storage.store(keys, addresses);
+  }
+
+  @Override
+  public void walk(IStorage storage, Object address, BiConsumer<Object, ANode> consumer) {
+    consumer.accept(address, this);
+    for (int i = 0; i < _len; ++i) {
+      child(storage, i).walk(storage, address(i), consumer);
+    }
   }
 
   public String str(IStorage storage, int lvl) {

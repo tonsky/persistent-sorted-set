@@ -2,6 +2,7 @@ package me.tonsky.persistent_sorted_set;
 
 import java.util.*;
 import java.util.concurrent.atomic.*;
+import java.util.function.*;
 
 @SuppressWarnings("unchecked")
 public abstract class ANode {
@@ -100,6 +101,7 @@ public abstract class ANode {
   public abstract Object store(IStorage storage);
   public abstract String str(IStorage storage, int lvl);
   public abstract void toString(StringBuilder sb, Object address, String indent);
+  public abstract void walk(IStorage storage, Object address, BiConsumer<Object, ANode> consumer);
 
   protected static int newLen(int len, AtomicBoolean edit) {
     if (edit != null && edit.get())

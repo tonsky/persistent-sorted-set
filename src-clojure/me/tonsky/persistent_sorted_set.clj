@@ -7,7 +7,7 @@
   (:import
     [java.lang.ref SoftReference]
     [java.util Comparator Arrays]
-    [java.util.concurrent.atomic AtomicBoolean]
+    [java.util.function BiConsumer]
     [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet]))
 
 (set! *warn-on-reflection* true)
@@ -30,9 +30,9 @@
    `(slice set from nil)` returns iterator for all Xs where X >= from.
    Optionally pass in comparator that will override the one that set uses. Supports efficient [[clojure.core/rseq]]."
   ([^PersistentSortedSet set from to]
-    (.slice set from to))
+   (.slice set from to))
   ([^PersistentSortedSet set from to ^Comparator cmp]
-    (.slice set from to cmp)))
+   (.slice set from to cmp)))
 
 
 (defn rslice
@@ -41,9 +41,9 @@
    `(rslice set from nil)` returns backwards iterator for all Xs where X <= from.
    Optionally pass in comparator that will override the one that set uses. Supports efficient [[clojure.core/rseq]]."
   ([^PersistentSortedSet set from to]
-    (.rslice set from to))
+   (.rslice set from to))
   ([^PersistentSortedSet set from to ^Comparator cmp]
-    (.rslice set from to cmp)))
+   (.rslice set from to cmp)))
 
 
 (defn- array-from-indexed [coll type from to]
@@ -126,6 +126,12 @@
   (PersistentSortedSet. nil cmp address storage nil -1 nil 0))
 
 
+(defn walk [^PersistentSortedSet set consumer]
+  (.walk set (reify BiConsumer
+               (accept [_ address node]
+                 (consumer address node)))))
+
+
 (defn set-branching-factor!
   "Global -- applies to all sets. Must be power of 2. Defaults to 64"
   [n]
@@ -161,7 +167,9 @@
                                    (.-_children ^Branch node))
                                  (reduce + 0))
                               len))))]
-    {:loaded-ratio  (if (some? root)
-                      (double (loaded-ratio root))
-                      0.0)
-     :durable-ratio (double (durable-ratio address root))}))
+    {:loaded-ratio  
+     (if (some? root)
+       (double (loaded-ratio root))
+       0.0)
+     :durable-ratio
+     (double (durable-ratio address root))}))

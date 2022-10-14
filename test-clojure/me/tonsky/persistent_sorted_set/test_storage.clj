@@ -118,6 +118,30 @@
         (let [set' (swap! *set #(reduce disj % xs))]
           (invariant set'))))))
     
+(deftest test-walk
+  (let [size    1000000
+        xs      (shuffle (range size))
+        set     (into (set/sorted-set) xs)
+        *stored (atom 0)]
+    (set/walk set
+      (fn [addr node]
+        (is (nil? addr))
+        (is (some? node))))
+    (store set (make-storage))
+    (set/walk set
+      (fn [addr node]
+        (is (some? addr))
+        (swap! *stored inc)
+        (is (some? node))))
+    (let [set'     (conj set (* 2 size))
+          *stored' (atom 0)]
+      (set/walk set'
+        (fn [addr node]
+          (if (some? addr)
+            (swap! *stored' inc))
+          (is (some? node))))
+      (is (= (- @*stored 4) @*stored')))))
+    
 (deftest test-lazyness
   (let [size     1000000
         xs       (shuffle (range size))

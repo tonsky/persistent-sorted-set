@@ -2,6 +2,7 @@ package me.tonsky.persistent_sorted_set;
 
 import java.util.*;
 import java.util.concurrent.atomic.*;
+import java.util.function.*;
 
 @SuppressWarnings("unchecked")
 public class Leaf extends ANode {
@@ -213,6 +214,11 @@ public class Leaf extends ANode {
   public Object store(IStorage storage) {
     Object[] keys = _len == _keys.length ? _keys : Arrays.copyOfRange(_keys, 0, _len);
     return storage.store(keys, null);
+  }
+
+  @Override
+  public void walk(IStorage storage, Object address, BiConsumer<Object, ANode> consumer) {
+    consumer.accept(address, this);
   }
 
   @Override

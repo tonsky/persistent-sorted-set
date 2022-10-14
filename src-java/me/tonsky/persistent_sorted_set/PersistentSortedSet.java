@@ -2,6 +2,7 @@ package me.tonsky.persistent_sorted_set;
 
 import java.util.*;
 import java.util.concurrent.atomic.*;
+import java.util.function.*;
 import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
@@ -153,6 +154,10 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
       address(_root.store(storage));
     }
     return _address;
+  }
+
+  public void walk(BiConsumer<Object, ANode> consumer) {
+    root().walk(_storage, _address, consumer);
   }
 
   public String toString() {
