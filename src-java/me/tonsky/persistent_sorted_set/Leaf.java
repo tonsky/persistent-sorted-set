@@ -15,17 +15,17 @@ public class Leaf extends ANode {
   }
 
   @Override
-  public int count(IStorage storage) {
+  public int count(IRestore storage) {
     return _len;
   }
 
   @Override
-  public boolean contains(IStorage storage, Object key, Comparator cmp) {
+  public boolean contains(IRestore storage, Object key, Comparator cmp) {
     return search(key, cmp) >= 0;
   }
 
   @Override
-  public Object[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit) {
+  public Object[] add(IRestore storage, Object key, Comparator cmp, AtomicBoolean edit) {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
@@ -85,7 +85,7 @@ public class Leaf extends ANode {
   }
 
   @Override
-  public Object[] remove(IStorage storage, Object key, ANode _left, ANode _right, Comparator cmp, AtomicBoolean edit) {
+  public Object[] remove(IRestore storage, Object key, ANode _left, ANode _right, Comparator cmp, AtomicBoolean edit) {
     Leaf left = (Leaf) _left;
     Leaf right = (Leaf) _right;
 
@@ -211,18 +211,18 @@ public class Leaf extends ANode {
   }
   
   @Override
-  public Object store(IStorage storage) {
+  public void walk(IRestore storage, Object address, BiConsumer<Object, ANode> consumer) {
+    consumer.accept(address, this);
+  }
+
+  @Override
+  public Object store(IStore storage) {
     Object[] keys = _len == _keys.length ? _keys : Arrays.copyOfRange(_keys, 0, _len);
     return storage.store(keys, null);
   }
 
   @Override
-  public void walk(IStorage storage, Object address, BiConsumer<Object, ANode> consumer) {
-    consumer.accept(address, this);
-  }
-
-  @Override
-  public String str(IStorage storage, int lvl) {
+  public String str(IRestore storage, int lvl) {
     StringBuilder sb = new StringBuilder("{");
     for (int i = 0; i < _len; ++i) {
       if (i > 0) sb.append(" ");

@@ -1,14 +1,15 @@
 (ns ^{:author "Nikita Prokopov"
       :doc "A B-tree based persistent sorted set. Supports transients, custom comparators, fast iteration, efficient slices (iterator over a part of the set) and reverse slices. Almost a drop-in replacement for [[clojure.core/sorted-set]], the only difference being this one can’t store nil."}
   me.tonsky.persistent-sorted-set
-  (:refer-clojure :exclude [conj disj load sorted-set sorted-set-by])
+  (:refer-clojure :exclude [conj disj sorted-set sorted-set-by])
   (:require
     [me.tonsky.persistent-sorted-set.arrays :as arrays])
   (:import
+    [clojure.lang RT]
     [java.lang.ref SoftReference]
     [java.util Comparator Arrays]
     [java.util.function BiConsumer]
-    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet]))
+    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStore IRestore Leaf PersistentSortedSet]))
 
 (set! *warn-on-reflection* true)
 
@@ -122,14 +123,59 @@
   ([& keys] (from-sequential compare keys)))
 
 
-(defn load [^Comparator cmp ^IStorage storage address]
+(defn restore-impl
+  "Low-level version of restore/restore-by. Useful if you can restore arrays
+   directly instead of going through map with vectors"
+  [^Comparator cmp  address ^IRestore storage]
   (PersistentSortedSet. nil cmp address storage nil -1 nil 0))
 
 
-(defn walk [^PersistentSortedSet set consumer]
+(defn restore-by
+  "cmp        :: java.util.Comparator
+   Leaf       :: {:keys [...]}
+   Branch     :: {:keys [...], :addresses [...]}
+   Node       :: Leaf | Branch
+   address    :: Object
+   restore-fn :: (address) => Node"
+  [cmp address restore-fn]
+  (let [storage (reify IRestore
+                  (load [_ address]
+                    (let [{:keys [keys addresses]} (restore-fn address)]
+                      (ANode/restore (to-array keys) (some-> addresses to-array)))))]
+    (restore-impl cmp address storage)))
+
+
+(defn restore 
+  "Leaf       :: {:keys [...]}
+   Branch     :: {:keys [...], :addresses [...]}
+   Node       :: Leaf | Branch
+   address    :: Object
+   restore-fn :: (address) => Node"
+  [address restore-fn]
+  (restore-by RT/DEFAULT_COMPARATOR address restore-fn))
+
+
+(defn walk
+  "address  :: Object
+   consumer :: (address ANode) => void"
+  [^PersistentSortedSet set consumer]
   (.walk set (reify BiConsumer
                (accept [_ address node]
                  (consumer address node)))))
+
+(defn store
+  "set      :: PersistentSortedSet
+   Leaf     :: {:keys [...]}
+   Branch   :: {:keys [...], :addresses [...]}
+   Node     :: Leaf | Branch
+   address  :: Object
+   store-fn :: (Node) => address"
+  [^PersistentSortedSet set store-fn]
+  (let [storage (reify IStore
+                  (store [_ keys addresses]
+                    (store-fn {:keys      (vec keys)
+                               :addresses (some-> addresses vec)})))]
+    (.store set storage)))
 
 
 (defn set-branching-factor!

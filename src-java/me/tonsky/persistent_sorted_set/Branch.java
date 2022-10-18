@@ -30,7 +30,7 @@ public class Branch extends ANode {
     _children  = null;
   }
 
-  public ANode child(IStorage storage, int idx) {
+  public ANode child(IRestore storage, int idx) {
     assert 0 <= idx && idx < _len;
     assert (_children != null && _children[idx] != null) || (_addresses != null && _addresses[idx] != null);
 
@@ -60,7 +60,7 @@ public class Branch extends ANode {
   }
 
   @Override
-  public int count(IStorage storage) {
+  public int count(IRestore storage) {
     int count = 0;
     for (int i = 0; i < _len; ++i) {
       count += child(storage, i).count(storage);
@@ -105,7 +105,7 @@ public class Branch extends ANode {
   }
 
   @Override
-  public boolean contains(IStorage storage, Object key, Comparator cmp) {
+  public boolean contains(IRestore storage, Object key, Comparator cmp) {
     int idx = search(key, cmp);
     if (idx >= 0) return true;
     int ins = -idx - 1; 
@@ -115,7 +115,7 @@ public class Branch extends ANode {
   }
 
   @Override
-  public Object[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit) {
+  public Object[] add(IRestore storage, Object key, Comparator cmp, AtomicBoolean edit) {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
@@ -291,7 +291,7 @@ public class Branch extends ANode {
   }
 
   @Override
-  public Object[] remove(IStorage storage, Object key, ANode _left, ANode _right, Comparator cmp, AtomicBoolean edit) {
+  public Object[] remove(IRestore storage, Object key, ANode _left, ANode _right, Comparator cmp, AtomicBoolean edit) {
     Branch left = (Branch) _left;
     Branch right = (Branch) _right;
 
@@ -557,7 +557,15 @@ public class Branch extends ANode {
   }
 
   @Override
-  public Object store(IStorage storage) {
+  public void walk(IRestore storage, Object address, BiConsumer<Object, ANode> consumer) {
+    consumer.accept(address, this);
+    for (int i = 0; i < _len; ++i) {
+      child(storage, i).walk(storage, address(i), consumer);
+    }
+  }
+
+  @Override
+  public Object store(IStore storage) {
     ensureAddresses();
     for (int i = 0; i < _len; ++i) {
       if (_addresses[i] == null) {
@@ -572,15 +580,7 @@ public class Branch extends ANode {
     return storage.store(keys, addresses);
   }
 
-  @Override
-  public void walk(IStorage storage, Object address, BiConsumer<Object, ANode> consumer) {
-    consumer.accept(address, this);
-    for (int i = 0; i < _len; ++i) {
-      child(storage, i).walk(storage, address(i), consumer);
-    }
-  }
-
-  public String str(IStorage storage, int lvl) {
+  public String str(IRestore storage, int lvl) {
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < _len; ++i) {
       sb.append("\n");

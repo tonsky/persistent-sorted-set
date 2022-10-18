@@ -94,14 +94,15 @@ public abstract class ANode {
     return sb.toString();
   }
 
-  public abstract int count(IStorage storage);
-  public abstract boolean contains(IStorage storage, Object key, Comparator cmp);
-  public abstract Object[] add(IStorage storage, Object key, Comparator cmp, AtomicBoolean edit);
-  public abstract Object[] remove(IStorage storage, Object key, ANode left, ANode right, Comparator cmp, AtomicBoolean edit);
-  public abstract Object store(IStorage storage);
-  public abstract String str(IStorage storage, int lvl);
+  public abstract int count(IRestore storage);
+  public abstract boolean contains(IRestore storage, Object key, Comparator cmp);
+  public abstract Object[] add(IRestore storage, Object key, Comparator cmp, AtomicBoolean edit);
+  public abstract Object[] remove(IRestore storage, Object key, ANode left, ANode right, Comparator cmp, AtomicBoolean edit);
+  public abstract String str(IRestore storage, int lvl);
   public abstract void toString(StringBuilder sb, Object address, String indent);
-  public abstract void walk(IStorage storage, Object address, BiConsumer<Object, ANode> consumer);
+  public abstract void walk(IRestore storage, Object address, BiConsumer<Object, ANode> consumer);
+
+  public abstract Object store(IStore storage);
 
   protected static int newLen(int len, AtomicBoolean edit) {
     if (edit != null && edit.get())

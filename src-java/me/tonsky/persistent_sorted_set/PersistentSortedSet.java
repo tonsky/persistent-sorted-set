@@ -25,7 +25,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
   public int _count;
   public int _version;
   public final AtomicBoolean _edit;
-  public IStorage _storage;
+  public IRestore _storage;
 
   public PersistentSortedSet() {
     this(null, RT.DEFAULT_COMPARATOR);
@@ -39,7 +39,7 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     this(meta, cmp, null, null, new Leaf(0, null), 0, null, 0);
   }
 
-  public PersistentSortedSet(IPersistentMap meta, Comparator cmp, Object address, IStorage storage, ANode root, int count, AtomicBoolean edit, int version) {
+  public PersistentSortedSet(IPersistentMap meta, Comparator cmp, Object address, IRestore storage, ANode root, int count, AtomicBoolean edit, int version) {
     super(meta, cmp);
     _address = address;
     _root    = root;
@@ -148,16 +148,15 @@ public class PersistentSortedSet extends APersistentSortedSet implements IEditab
     }
   }
 
-  public Object store(IStorage storage) {
-    _storage = storage;
+  public void walk(BiConsumer<Object, ANode> consumer) {
+    root().walk(_storage, _address, consumer);
+  }
+
+  public Object store(IStore storage) {
     if (_address == null) {
       address(_root.store(storage));
     }
     return _address;
-  }
-
-  public void walk(BiConsumer<Object, ANode> consumer) {
-    root().walk(_storage, _address, consumer);
   }
 
   public String toString() {
