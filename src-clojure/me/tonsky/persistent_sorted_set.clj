@@ -131,33 +131,35 @@
 
 
 (defn restore-by
-  "cmp        :: java.util.Comparator
-   Leaf       :: {:keys [...]}
-   Branch     :: {:keys [...], :addresses [...]}
+  "Key        :: Comparable
+   Address    :: Object
+   cmp        :: java.util.Comparator
+   Leaf       :: {:keys [Key, ...]}
+   Branch     :: {:keys [Key, ...], :children [Address, ...]}
    Node       :: Leaf | Branch
-   address    :: Object
-   restore-fn :: (address) => Node"
+   restore-fn :: (Address) => Node"
   [cmp address restore-fn]
   (let [storage (reify IRestore
                   (load [_ address]
-                    (let [{:keys [keys addresses]} (restore-fn address)]
-                      (ANode/restore (to-array keys) (some-> addresses to-array)))))]
+                    (let [{:keys [keys children]} (restore-fn address)]
+                      (ANode/restore (to-array keys) (some-> children to-array)))))]
     (restore-impl cmp address storage)))
 
 
 (defn restore 
-  "Leaf       :: {:keys [...]}
-   Branch     :: {:keys [...], :addresses [...]}
+  "Key        :: Comparable
+   Address    :: Object
+   Leaf       :: {:keys [Key, ...]}
+   Branch     :: {:keys [Key, ...], :children [Address, ...]}
    Node       :: Leaf | Branch
-   address    :: Object
-   restore-fn :: (address) => Node"
+   restore-fn :: (Address) => Node"
   [address restore-fn]
   (restore-by RT/DEFAULT_COMPARATOR address restore-fn))
 
 
 (defn walk
-  "address  :: Object
-   consumer :: (address ANode) => void"
+  "Address  :: Object
+   consumer :: (Address, ANode) => void"
   [^PersistentSortedSet set consumer]
   (.walk set (reify BiConsumer
                (accept [_ address node]
@@ -165,16 +167,17 @@
 
 (defn store
   "set      :: PersistentSortedSet
-   Leaf     :: {:keys [...]}
-   Branch   :: {:keys [...], :addresses [...]}
+   Key      :: Comparable
+   Address  :: Object
+   Leaf     :: {:keys [Key, ...]}
+   Branch   :: {:keys [Key, ...], :children [Address, ...]}
    Node     :: Leaf | Branch
-   address  :: Object
-   store-fn :: (Node) => address"
+   store-fn :: (Node) => Address"
   [^PersistentSortedSet set store-fn]
   (let [storage (reify IStore
-                  (store [_ keys addresses]
+                  (store [_ keys children]
                     (store-fn {:keys      (vec keys)
-                               :addresses (some-> addresses vec)})))]
+                               :children (some-> children vec)})))]
     (.store set storage)))
 
 

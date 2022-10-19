@@ -44,7 +44,7 @@
     (set/store set (store-fn (atom {})))
     (is (= 1.0 (:durable-ratio (set/stats set)))
       (let [set' (disj set 3500)] ;; one of the middle branches
-        (is (< 0.99 (:durable-ratio (set/stats set'))))))))
+        (is (< 0.98 (:durable-ratio (set/stats set'))))))))
 
 (defmacro dobatches [[sym coll] & body]
   `(loop [coll# ~coll]
@@ -73,14 +73,14 @@
                           (doseq [i (range len)
                                   :let [addr   (nth (.-_addresses node) i)
                                         child  (.child node nil (int i))
-                                        {:keys [keys addresses]} (@*storage addr)]]
+                                        {:keys [keys children]} (@*storage addr)]]
                             ;; nodes inside stored? has to ALL be stored
                             (when stored?
                               (is (some? addr)))
                             (when (some? addr)
                               (is (= keys 
                                     (take (.len ^ANode child) (.-_keys ^ANode child))))
-                              (is (= addresses
+                              (is (= children
                                     (when (instance? Branch child)
                                       (take (.len ^Branch child) (.-_addresses ^Branch child))))))
                             (invariant child (some? addr))))
