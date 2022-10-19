@@ -5,13 +5,18 @@ import java.util.concurrent.atomic.*;
 import java.util.function.*;
 
 @SuppressWarnings("unchecked")
-public abstract class ANode {
+public abstract class ANode<Key, Address> {
+  // >= 0
   public int _len;
+
+  // NotNull
   // Only valid [0 ... _len-1]
-  public final Object[] _keys;
+  public final Key[] _keys;
+
+  // Nullable
   public final AtomicBoolean _edit;
 
-  public ANode(int len, Object[] keys, AtomicBoolean edit) {
+  public ANode(int len, Key[] keys, AtomicBoolean edit) {
     assert keys.length >= len;
 
     _len   = len;
@@ -23,7 +28,7 @@ public abstract class ANode {
     return _len;
   }
 
-  public Object maxKey() {
+  public Key maxKey() {
     return _keys[_len - 1];
   }
 
@@ -31,7 +36,7 @@ public abstract class ANode {
     return _edit != null && _edit.get();
   }
 
-  public int search(Object key, Comparator cmp) {
+  public int search(Key key, Comparator<Key> cmp) {
     return Arrays.binarySearch(_keys, 0, _len, key, cmp);
 
     // int low = 0, high = _len;
@@ -53,7 +58,7 @@ public abstract class ANode {
     // return -high - 1; // high
   }
 
-  public int searchFirst(Object key, Comparator cmp) {
+  public int searchFirst(Key key, Comparator<Key> cmp) {
     int low = 0, high = _len;
     while (low < high) {
       int mid = (high + low) >>> 1;
@@ -66,7 +71,7 @@ public abstract class ANode {
     return low;
   }
 
-  public int searchLast(Object key, Comparator cmp) {
+  public int searchLast(Key key, Comparator<Key> cmp) {
     int low = 0, high = _len;
     while (low < high) {
       int mid = (high + low) >>> 1;
@@ -79,7 +84,7 @@ public abstract class ANode {
     return low - 1;
   }
 
-  public static ANode restore(Object[] keys, Object[] addresses) {
+  public static <Key, Address> ANode restore(Key[] keys, Address[] addresses) {
     if (addresses == null) {
       return new Leaf(keys.length, keys, null);
     } else {
@@ -95,14 +100,13 @@ public abstract class ANode {
   }
 
   public abstract int count(IRestore storage);
-  public abstract boolean contains(IRestore storage, Object key, Comparator cmp);
-  public abstract Object[] add(IRestore storage, Object key, Comparator cmp, AtomicBoolean edit);
-  public abstract Object[] remove(IRestore storage, Object key, ANode left, ANode right, Comparator cmp, AtomicBoolean edit);
+  public abstract boolean contains(IRestore storage, Key key, Comparator<Key> cmp);
+  public abstract ANode[] add(IRestore storage, Key key, Comparator<Key> cmp, AtomicBoolean edit);
+  public abstract ANode[] remove(IRestore storage, Key key, ANode left, ANode right, Comparator<Key> cmp, AtomicBoolean edit);
   public abstract String str(IRestore storage, int lvl);
-  public abstract void toString(StringBuilder sb, Object address, String indent);
-  public abstract void walk(IRestore storage, Object address, BiConsumer<Object, ANode> consumer);
-
-  public abstract Object store(IStore storage);
+  public abstract void walk(IRestore storage, Address address, BiConsumer<Address, ANode> consumer);
+  public abstract Address store(IStore<Key, Address> storage);
+  public abstract void toString(StringBuilder sb, Address address, String indent);
 
   protected static int newLen(int len, AtomicBoolean edit) {
     if (edit != null && edit.get())
