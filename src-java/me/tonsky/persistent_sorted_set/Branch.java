@@ -4,6 +4,7 @@ import java.lang.ref.*;
 import java.util.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
+import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Branch<Key, Address> extends ANode<Key, Address> {
@@ -37,44 +38,13 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     _children  = null;
   }
 
-  public ANode<Key, Address> child(IRestore storage, int idx) {
-    assert 0 <= idx && idx < _len;
-    assert (_children != null && _children[idx] != null) || (_addresses != null && _addresses[idx] != null);
-
-    ANode child = null;
-    if (_children != null) {
-      Object ref = _children[idx];
-      if (ref instanceof SoftReference) {
-        child = (ANode) ((SoftReference) ref).get();
-      } else {
-        child = (ANode) ref;
-      }
+  protected Address[] ensureAddresses() {
+    if (_addresses == null) {
+      _addresses = (Address[]) new Object[_keys.length];
     }
-
-    if (child == null) {
-      child = storage.load(_addresses[idx]);
-      ensureChildren()[idx] = new SoftReference<ANode>(child);
-    }
-    return child;
+    return _addresses;
   }
-
-  public ANode<Key, Address> child(int idx, ANode<Key, Address> child) {
-    if (_children != null || child != null) {
-      ensureChildren();
-      _children[idx] = child;
-    }
-    return child;
-  }
-
-  @Override
-  public int count(IRestore storage) {
-    int count = 0;
-    for (int i = 0; i < _len; ++i) {
-      count += child(storage, i).count(storage);
-    }
-    return count;
-  }
-
+  
   public Address address(int idx) {
     assert 0 <= idx && idx < _len;
 
@@ -90,18 +60,48 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     if (_addresses != null || address != null) {
       ensureAddresses();
       _addresses[idx] = address;
-      if (_children[idx] instanceof ANode) {
-        _children[idx] = new SoftReference(_children[idx]);
+      if (_children != null) {
+        _children[idx] = null;
       }
+      // if (_children[idx] instanceof ANode) {
+      //   _children[idx] = new SoftReference(_children[idx]);
+      // }
     }
     return address;
   }
 
-  protected Address[] ensureAddresses() {
-    if (_addresses == null) {
-      _addresses = (Address[]) new Object[_keys.length];
+  public ANode<Key, Address> child(IStorage storage, int idx) {
+    assert 0 <= idx && idx < _len;
+    assert (_children != null && _children[idx] != null) || (_addresses != null && _addresses[idx] != null);
+
+    ANode child = null;
+    if (_children != null) {
+      child = (ANode) _children[idx];
     }
-    return _addresses;
+
+    if (child == null) {
+      child = storage.restore(_addresses[idx]);
+      // ensureChildren()[idx] = new SoftReference<ANode>(child);
+    }
+    return child;
+  }
+
+  public ANode<Key, Address> child(int idx, ANode<Key, Address> child) {
+    address(idx, null);
+    if (_children != null || child != null) {
+      ensureChildren();
+      _children[idx] = child;
+    }
+    return child;
+  }
+
+  @Override
+  public int count(IStorage storage) {
+    int count = 0;
+    for (int i = 0; i < _len; ++i) {
+      count += child(storage, i).count(storage);
+    }
+    return count;
   }
 
   protected Object[] ensureChildren() {
@@ -112,7 +112,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
   }
 
   @Override
-  public boolean contains(IRestore storage, Key key, Comparator<Key> cmp) {
+  public boolean contains(IStorage storage, Key key, Comparator<Key> cmp) {
     int idx = search(key, cmp);
     if (idx >= 0) return true;
     int ins = -idx - 1; 
@@ -122,7 +122,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
   }
 
   @Override
-  public ANode[] add(IRestore storage, Key key, Comparator<Key> cmp, AtomicBoolean edit) {
+  public ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, AtomicBoolean edit) {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
@@ -143,7 +143,6 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     if (1 == nodes.length && editable()) {
       ANode<Key, Address> node = nodes[0];
       _keys[ins] = node.maxKey();
-      address(ins, null);
       child(ins, node);
       if (ins == _len - 1 && node.maxKey() == maxKey()) // TODO why maxKey check?
         return new ANode[]{this}; // update maxKey
@@ -298,7 +297,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
   }
 
   @Override
-  public ANode[] remove(IRestore storage, Key key, ANode _left, ANode _right, Comparator<Key> cmp, AtomicBoolean edit) {
+  public ANode[] remove(IStorage storage, Key key, ANode _left, ANode _right, Comparator<Key> cmp, AtomicBoolean edit) {
     Branch left = (Branch) _left;
     Branch right = (Branch) _right;
 
@@ -564,15 +563,15 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
   }
 
   @Override
-  public void walk(IRestore storage, Address address, BiConsumer<Address, ANode> consumer) {
-    consumer.accept(address, this);
+  public void walk(IStorage storage, Address address, IFn onAddress) {
+    onAddress.invoke(address);
     for (int i = 0; i < _len; ++i) {
-      child(storage, i).walk(storage, address(i), consumer);
+      child(storage, i).walk(storage, address(i), onAddress);
     }
   }
 
   @Override
-  public Address store(IStore<Key, Address> storage) {
+  public Address store(IStorage<Key, Address> storage) {
     ensureAddresses();
     for (int i = 0; i < _len; ++i) {
       if (_addresses[i] == null) {
@@ -587,7 +586,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     return storage.store(keys, addresses);
   }
 
-  public String str(IRestore storage, int lvl) {
+  public String str(IStorage storage, int lvl) {
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < _len; ++i) {
       sb.append("\n");
@@ -605,7 +604,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     for (int i = 0; i < _len; ++i) {
       sb.append("\n");
       ANode child = null;
-      if(_children == null) {
+      if (_children != null) {
         Object ref = _children[i];
         if (ref != null) {
           if (ref instanceof SoftReference) {

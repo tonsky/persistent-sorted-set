@@ -9,7 +9,7 @@
     [java.lang.ref SoftReference]
     [java.util Comparator Arrays]
     [java.util.function BiConsumer]
-    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStore IRestore Leaf PersistentSortedSet]))
+    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet]))
 
 (set! *warn-on-reflection* true)
 
@@ -122,103 +122,31 @@
   ([] (PersistentSortedSet/EMPTY))
   ([& keys] (from-sequential compare keys)))
 
-
-(defn restore-impl
-  "Low-level version of restore/restore-by. Useful if you can restore arrays
-   directly instead of going through map with vectors"
-  [^Comparator cmp  address ^IRestore storage]
+  
+(defn restore-by
+  [cmp address ^IStorage storage]
   (PersistentSortedSet. nil cmp address storage nil -1 nil 0))
 
 
-(defn restore-by
-  "Key        :: Comparable
-   Address    :: Object
-   cmp        :: java.util.Comparator
-   Leaf       :: {:keys [Key, ...]}
-   Branch     :: {:keys [Key, ...], :children [Address, ...]}
-   Node       :: Leaf | Branch
-   restore-fn :: (Address) => Node"
-  [cmp address restore-fn]
-  (let [storage (reify IRestore
-                  (load [_ address]
-                    (let [{:keys [keys children]} (restore-fn address)]
-                      (ANode/restore (to-array keys) (some-> children to-array)))))]
-    (restore-impl cmp address storage)))
-
-
 (defn restore 
-  "Key        :: Comparable
-   Address    :: Object
-   Leaf       :: {:keys [Key, ...]}
-   Branch     :: {:keys [Key, ...], :children [Address, ...]}
-   Node       :: Leaf | Branch
-   restore-fn :: (Address) => Node"
-  [address restore-fn]
-  (restore-by RT/DEFAULT_COMPARATOR address restore-fn))
+  [address ^IStorage storage]
+  (restore-by RT/DEFAULT_COMPARATOR address storage))
 
 
-(defn walk
-  "Address  :: Object
-   consumer :: (Address, ANode) => void"
-  [^PersistentSortedSet set consumer]
-  (.walk set (reify BiConsumer
-               (accept [_ address node]
-                 (consumer address node)))))
+(defn walk-addresses
+  "consume-fn :: (Address) => void"
+  [^PersistentSortedSet set consume-fn]
+  (.walk set consume-fn))
+
 
 (defn store
-  "set      :: PersistentSortedSet
-   Key      :: Comparable
-   Address  :: Object
-   Leaf     :: {:keys [Key, ...]}
-   Branch   :: {:keys [Key, ...], :children [Address, ...]}
-   Node     :: Leaf | Branch
-   store-fn :: (Node) => Address"
-  [^PersistentSortedSet set store-fn]
-  (let [storage (reify IStore
-                  (store [_ keys children]
-                    (store-fn {:keys      (vec keys)
-                               :children (some-> children vec)})))]
-    (.store set storage)))
+  ([^PersistentSortedSet set]
+   (.store set))
+  ([^PersistentSortedSet set ^IStorage storage]
+   (.store set storage)))
 
 
 (defn set-branching-factor!
   "Global -- applies to all sets. Must be power of 2. Defaults to 64"
   [n]
   (PersistentSortedSet/setMaxLen n))
-
-
-(defn stats [^PersistentSortedSet set]
-  (let [address       (.-_address set)
-        root          (.-_root set)
-        storage       (.-_storage set)
-        loaded-ratio  (fn loaded-ratio [^ANode node]
-                        (cond 
-                          (nil? node)  0.0
-                          (instance? Leaf node) 1.0
-                          (instance? SoftReference node) (loaded-ratio (.get ^SoftReference node))
-                          :else
-                          (let [len (.len node)]
-                            (/ (->> (.-_children ^Branch node) (take len) (map loaded-ratio) (reduce + 0))
-                              len))))
-        durable-ratio (fn durable-ratio [address ^ANode node]
-                        (cond 
-                          (some? address)       1.0
-                          (instance? Leaf node) 0.0
-                          (instance? SoftReference node) (durable-ratio (.get ^SoftReference node))
-                          :else
-                          (let [len (.len node)]
-                            (/ (->>
-                                 (map
-                                   (fn [_ addr child]
-                                     (durable-ratio addr child))
-                                   (range len)
-                                   (.-_addresses ^Branch node)
-                                   (.-_children ^Branch node))
-                                 (reduce + 0))
-                              len))))]
-    {:loaded-ratio  
-     (if (some? root)
-       (double (loaded-ratio root))
-       0.0)
-     :durable-ratio
-     (double (durable-ratio address root))}))

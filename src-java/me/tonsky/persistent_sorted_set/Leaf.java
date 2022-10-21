@@ -3,6 +3,7 @@ package me.tonsky.persistent_sorted_set;
 import java.util.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
+import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Leaf<Key, Address> extends ANode<Key, Address> {
@@ -15,17 +16,17 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
   }
 
   @Override
-  public int count(IRestore storage) {
+  public int count(IStorage storage) {
     return _len;
   }
 
   @Override
-  public boolean contains(IRestore storage, Key key, Comparator<Key> cmp) {
+  public boolean contains(IStorage storage, Key key, Comparator<Key> cmp) {
     return search(key, cmp) >= 0;
   }
 
   @Override
-  public ANode[] add(IRestore storage, Key key, Comparator<Key> cmp, AtomicBoolean edit) {
+  public ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, AtomicBoolean edit) {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
@@ -85,7 +86,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
   }
 
   @Override
-  public ANode[] remove(IRestore storage, Key key, ANode _left, ANode _right, Comparator<Key> cmp, AtomicBoolean edit) {
+  public ANode[] remove(IStorage storage, Key key, ANode _left, ANode _right, Comparator<Key> cmp, AtomicBoolean edit) {
     Leaf left = (Leaf) _left;
     Leaf right = (Leaf) _right;
 
@@ -211,18 +212,18 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
   }
   
   @Override
-  public void walk(IRestore storage, Address address, BiConsumer<Address, ANode> consumer) {
-    consumer.accept(address, this);
+  public void walk(IStorage storage, Address address, IFn onAddress) {
+    onAddress.invoke(address);
   }
 
   @Override
-  public Address store(IStore<Key, Address> storage) {
+  public Address store(IStorage<Key, Address> storage) {
     Key[] keys = _len == _keys.length ? _keys : Arrays.copyOfRange(_keys, 0, _len);
     return storage.store(keys, null);
   }
 
   @Override
-  public String str(IRestore storage, int lvl) {
+  public String str(IStorage storage, int lvl) {
     StringBuilder sb = new StringBuilder("{");
     for (int i = 0; i < _len; ++i) {
       if (i > 0) sb.append(" ");

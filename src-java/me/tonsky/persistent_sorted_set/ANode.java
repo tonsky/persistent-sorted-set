@@ -3,6 +3,7 @@ package me.tonsky.persistent_sorted_set;
 import java.util.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
+import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public abstract class ANode<Key, Address> {
@@ -99,13 +100,13 @@ public abstract class ANode<Key, Address> {
     return sb.toString();
   }
 
-  public abstract int count(IRestore storage);
-  public abstract boolean contains(IRestore storage, Key key, Comparator<Key> cmp);
-  public abstract ANode[] add(IRestore storage, Key key, Comparator<Key> cmp, AtomicBoolean edit);
-  public abstract ANode[] remove(IRestore storage, Key key, ANode left, ANode right, Comparator<Key> cmp, AtomicBoolean edit);
-  public abstract String str(IRestore storage, int lvl);
-  public abstract void walk(IRestore storage, Address address, BiConsumer<Address, ANode> consumer);
-  public abstract Address store(IStore<Key, Address> storage);
+  public abstract int count(IStorage storage);
+  public abstract boolean contains(IStorage storage, Key key, Comparator<Key> cmp);
+  public abstract ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, AtomicBoolean edit);
+  public abstract ANode[] remove(IStorage storage, Key key, ANode left, ANode right, Comparator<Key> cmp, AtomicBoolean edit);
+  public abstract String str(IStorage storage, int lvl);
+  public abstract void walk(IStorage storage, Address address, IFn onAddress);
+  public abstract Address store(IStorage<Key, Address> storage);
   public abstract void toString(StringBuilder sb, Address address, String indent);
 
   protected static int newLen(int len, AtomicBoolean edit) {

@@ -25,7 +25,7 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
   public int _count;
   public int _version;
   public final AtomicBoolean _edit;
-  public IRestore<Key, Address> _storage;
+  public IStorage<Key, Address> _storage;
 
   public PersistentSortedSet() {
     this(null, RT.DEFAULT_COMPARATOR);
@@ -39,7 +39,7 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
     this(meta, cmp, null, null, new Leaf<Key, Address>(0, null), 0, null, 0);
   }
 
-  public PersistentSortedSet(IPersistentMap meta, Comparator<Key> cmp, Address address, IRestore<Key, Address> storage, ANode<Key, Address> root, int count, AtomicBoolean edit, int version) {
+  public PersistentSortedSet(IPersistentMap meta, Comparator<Key> cmp, Address address, IStorage<Key, Address> storage, ANode<Key, Address> root, int count, AtomicBoolean edit, int version) {
     super(meta, cmp);
     _address = address;
     _root    = root;
@@ -50,9 +50,8 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
   }
 
   public ANode<Key, Address> root() {
-    if (_root == null)
-      _root = _storage.load(_address);
-    return _root;
+    assert _address != null || _root != null;
+    return _address != null ? _storage.restore(_address) : _root;
   }
 
   private int alterCount(int delta) {
@@ -153,15 +152,24 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
     }
   }
 
-  public void walk(BiConsumer<Address, ANode> consumer) {
-    root().walk(_storage, _address, consumer);
+  public void walk(IFn onAddress) {
+    root().walk(_storage, _address, onAddress);
   }
 
-  public Address store(IStore<Key, Address> storage) {
+  public Address store() {
+    assert _storage != null;
+
     if (_address == null) {
-      address(_root.store(storage));
+      address(_root.store(_storage));
+      _root = null;
     }
+
     return _address;
+  }
+
+  public Address store(IStorage<Key, Address> storage) {
+    _storage = storage;
+    return store();
   }
 
   public String toString() {

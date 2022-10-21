@@ -6,9 +6,12 @@
   (:import
     [clojure.lang RT]
     [java.util Comparator Arrays]
-    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStore IRestore Leaf PersistentSortedSet]))
+    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet]))
 
 (set! *warn-on-reflection* true)
+
+(def ^:dynamic *debug*
+  false)
 
 (defn gen-addr []
   #_(random-uuid)
@@ -19,32 +22,97 @@
     {:reads 0
      :writes 0}))
 
-(defn restore-fn [*storage]
-  (fn [address]
-    (swap! *stats update :reads inc)
-    (@*storage address)))
-  
-(defn store-fn [*storage]
-  (fn [node]
+(defmacro with-stats [& body]
+  `(do
+     (reset! *stats {:reads 0 :writes 0})
+     ~@body))
+
+(defrecord Storage [*memory *disk]
+  IStorage
+  (store [_ keys addresses]
+    (swap! *stats update :writes inc)
     (let [address (gen-addr)]
-      (swap! *storage assoc address node)
-      (swap! *stats update :writes inc)
-      address)))
+      (swap! *disk assoc address
+        {:keys     (vec keys)
+         :children (some-> addresses vec)})
+      address))
+  (restore [_ address]
+    (or
+      (@*memory address)
+      (let [{:keys [keys children]} (@*disk address)
+            node (ANode/restore (into-array keys) (some-> children into-array))]
+        (swap! *stats update :reads inc)
+        (swap! *memory assoc address node)
+        node))))
+
+(defn storage
+  (^IStorage []
+   (->Storage (atom {}) (atom {})))
+  (^IStorage [*disk]
+   (->Storage (atom {}) *disk))
+  (^IStorage [*memory *disk]
+   (->Storage *memory *disk)))
 
 (defn roundtrip [set]
-  (let [*storage (atom {})
-        address  (set/store set (store-fn *storage))]
-    (set/restore address (restore-fn *storage))))
+  (let [storage (storage)
+        address (set/store set storage)]
+    (set/restore address storage)))
+
+(defn loaded-ratio
+  ([^PersistentSortedSet set]
+   (let [storage (.-_storage set)
+         address (.-_address set)
+         root    (.-_root set)]
+     (loaded-ratio (some-> storage :*memory deref) address root)))
+  ([memory address node]
+   (when *debug*
+     (println address (contains? memory address) node (memory address)))
+   (if (and address (not (contains? memory address)))
+     0.0
+     (let [node (or node (memory address))]
+       (if (instance? Leaf node)
+         1.0
+         (let [node ^Branch node
+               len (.len node)]
+           (double
+             (/ (->>
+                  (mapv
+                    (fn [_ child-addr child]
+                      (loaded-ratio memory child-addr child))
+                    (range len)
+                    (or (.-_addresses node) (repeat len nil))
+                    (or (.-_children node) (repeat len nil)))
+                  (reduce + 0))
+               len))))))))
+
+(defn durable-ratio
+  ([^PersistentSortedSet set]
+   (double (durable-ratio (.-_address set) (.-_root set))))
+  ([address ^ANode node]
+   (cond 
+     (some? address)       1.0
+     (instance? Leaf node) 0.0
+     :else
+     (let [len (.len node)]
+       (/ (->>
+            (map
+              (fn [_ child-addr child]
+                (durable-ratio child-addr child))
+              (range len)
+              (.-_addresses ^Branch node)
+              (.-_children ^Branch node))
+            (reduce + 0))
+         len)))))
 
 (deftest test-lazy-remove
   "Check that invalidating middle branch does not invalidates siblings"
   (let [size 7000 ;; 3-4 branches
         xs   (shuffle (range size))
         set  (into (set/sorted-set) xs)]
-    (set/store set (store-fn (atom {})))
-    (is (= 1.0 (:durable-ratio (set/stats set)))
+    (set/store set (storage))
+    (is (= 1.0 (durable-ratio set))
       (let [set' (disj set 3500)] ;; one of the middle branches
-        (is (< 0.98 (:durable-ratio (set/stats set'))))))))
+        (is (< 0.98 (durable-ratio set')))))))
 
 (defmacro dobatches [[sym coll] & body]
   `(loop [coll# ~coll]
@@ -55,53 +123,52 @@
          (recur tail#)))))
 
 (deftest stresstest-stable-addresses
-  (let [size       10000
-        adds       (shuffle (range size))
-        removes    (shuffle adds)
-        *set       (atom (set/sorted-set))
-        *storage   (atom {})
-        store-fn   (store-fn *storage)
-        restore-fn (restore-fn *storage)
-        invariant  (fn invariant 
-                     ([o]
-                      (invariant (.-_root ^PersistentSortedSet o) (some? (.-_address ^PersistentSortedSet o))))
-                     ([o stored?]
-                      (condp instance? o
-                        Branch
-                        (let [node ^Branch o
-                              len (.len node)]
-                          (doseq [i (range len)
-                                  :let [addr   (nth (.-_addresses node) i)
-                                        child  (.child node nil (int i))
-                                        {:keys [keys children]} (@*storage addr)]]
-                            ;; nodes inside stored? has to ALL be stored
-                            (when stored?
-                              (is (some? addr)))
-                            (when (some? addr)
-                              (is (= keys 
-                                    (take (.len ^ANode child) (.-_keys ^ANode child))))
-                              (is (= children
-                                    (when (instance? Branch child)
-                                      (take (.len ^Branch child) (.-_addresses ^Branch child))))))
-                            (invariant child (some? addr))))
-                        Leaf
-                        true)))]
+  (let [size      10000
+        adds      (shuffle (range size))
+        removes   (shuffle adds)
+        *set      (atom (set/sorted-set))
+        *storage  (atom {})
+        storage   (storage *storage)
+        invariant (fn invariant 
+                    ([^PersistentSortedSet o]
+                     (invariant (.root o) (some? (.-_address o))))
+                    ([^ANode o stored?]
+                     (condp instance? o
+                       Branch
+                       (let [node ^Branch o
+                             len (.len node)]
+                         (doseq [i (range len)
+                                 :let [addr   (nth (.-_addresses node) i)
+                                       child  (.child node storage (int i))
+                                       {:keys [keys children]} (@*storage addr)]]
+                           ;; nodes inside stored? has to ALL be stored
+                           (when stored?
+                             (is (some? addr)))
+                           (when (some? addr)
+                             (is (= keys 
+                                   (take (.len ^ANode child) (.-_keys ^ANode child))))
+                             (is (= children
+                                   (when (instance? Branch child)
+                                     (take (.len ^Branch child) (.-_addresses ^Branch child))))))
+                           (invariant child (some? addr))))
+                       Leaf
+                       true)))]
     (testing "Persist after each"
       (dobatches [xs adds]
         (let [set' (swap! *set into xs)]
           (invariant set')
-          (set/store set' store-fn)))
+          (set/store set' storage)))
       
       (invariant @*set)
       
       (dobatches [xs removes]
         (let [set' (swap! *set #(reduce disj % xs))]
           (invariant set')
-          (set/store set' store-fn))))
+          (set/store set' storage))))
     
     (testing "Persist once"
       (reset! *set (into (set/sorted-set) adds))
-      (set/store @*set store-fn)
+      (set/store @*set storage)
       (dobatches [xs removes]
         (let [set' (swap! *set #(reduce disj % xs))]
           (invariant set'))))))
@@ -111,52 +178,47 @@
         xs      (shuffle (range size))
         set     (into (set/sorted-set) xs)
         *stored (atom 0)]
-    (set/walk set
-      (fn [addr node]
-        (is (nil? addr))
-        (is (some? node))))
-    (set/store set (store-fn (atom {})))
-    (set/walk set
-      (fn [addr node]
+    (set/walk-addresses set
+      (fn [addr]
+        (is (nil? addr))))
+    (set/store set (storage))
+    (set/walk-addresses set
+      (fn [addr]
         (is (some? addr))
-        (swap! *stored inc)
-        (is (some? node))))
+        (swap! *stored inc)))
     (let [set'     (conj set (* 2 size))
           *stored' (atom 0)]
-      (set/walk set'
-        (fn [addr node]
+      (set/walk-addresses set'
+        (fn [addr]
           (if (some? addr)
-            (swap! *stored' inc))
-          (is (some? node))))
+            (swap! *stored' inc))))
       (is (= (- @*stored 4) @*stored')))))
-    
+
 (deftest test-lazyness
   (let [size       1000000
         xs         (shuffle (range size))
         rm         (vec (repeatedly (quot size 5) #(rand-nth xs)))
         original   (-> (reduce disj (into (set/sorted-set) xs) rm)
                      (disj (quot size 4) (quot size 2)))
-        _          (reset! *stats {:reads 0, :writes 0})
-        *storage   (atom {})
-        store-fn   (store-fn *storage)
-        restore-fn (restore-fn *storage)
-        address    (set/store original store-fn)
+        storage    (storage)
+        address    (with-stats
+                     (set/store original storage))
         _          (is (= 0 (:reads @*stats)))
         _          (is (> (:writes @*stats) (/ size PersistentSortedSet/MAX_LEN)))
-        loaded     (set/restore address restore-fn)
+        loaded     (set/restore address storage)
         _          (is (= 0 (:reads @*stats)))
-        _          (is (= 0.0 (:loaded-ratio (set/stats loaded))))
-        _          (is (= 1.0 (:durable-ratio (set/stats loaded))))
+        _          (is (= 0.0 (loaded-ratio loaded)))
+        _          (is (= 1.0 (durable-ratio loaded)))
                 
         ; touch first 100
         _       (is (= (take 100 loaded) (take 100 original)))
         _       (is (<= 5 (:reads @*stats) 7))
-        l100    (:loaded-ratio (set/stats loaded))
+        l100    (loaded-ratio loaded)
         _       (is (< 0 l100 1.0))
     
         ; touch first 5000
         _       (is (= (take 5000 loaded) (take 5000 original)))
-        l5000   (:loaded-ratio (set/stats loaded))
+        l5000   (loaded-ratio loaded)
         _       (is (< l100 l5000 1.0))
     
         ; touch middle
@@ -164,12 +226,12 @@
         to      (+ (quot size 2) (quot size 200))
         _       (is (= (vec (set/slice loaded from to))
                       (vec (set/slice loaded from to))))
-        lmiddle (:loaded-ratio (set/stats loaded))
+        lmiddle (loaded-ratio loaded)
         _       (is (< l5000 lmiddle 1.0))
         
         ; touch 100 last
         _       (is (= (take 100 (rseq loaded)) (take 100 (rseq original))))
-        lrseq   (:loaded-ratio (set/stats loaded))
+        lrseq   (loaded-ratio loaded)
         _       (is (< lmiddle lrseq 1.0))
     
         ; touch 10000 last
@@ -177,52 +239,50 @@
         to      size
         _       (is (= (vec (set/slice loaded from to))
                       (vec (set/slice loaded from 1000000))))
-        ltail   (:loaded-ratio (set/stats loaded))
+        ltail   (loaded-ratio loaded)
         _       (is (< lrseq ltail 1.0))
     
         ; conj to beginning
         loaded' (conj loaded -1)
-        _       (is (= ltail (:loaded-ratio (set/stats loaded'))))
-        _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
+        _       (is (= ltail (loaded-ratio loaded')))
+        _       (is (< (durable-ratio loaded') 1.0))
         
         ; conj to middle
         loaded' (conj loaded (quot size 2))
-        _       (is (= ltail (:loaded-ratio (set/stats loaded'))))
-        _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
+        _       (is (= ltail (loaded-ratio loaded')))
+        _       (is (< (durable-ratio loaded') 1.0))
         
         ; conj to end
         loaded' (conj loaded Long/MAX_VALUE)
-        _       (is (= ltail (:loaded-ratio (set/stats loaded'))))
-        _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
+        _       (is (= ltail (loaded-ratio loaded')))
+        _       (is (< (durable-ratio loaded') 1.0))
         
         ; conj to untouched area
         loaded' (conj loaded (quot size 4))
-        _       (is (< ltail (:loaded-ratio (set/stats loaded')) 1.0))
-        _       (is (< ltail (:loaded-ratio (set/stats loaded)) 1.0))
-        _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
+        _       (is (< ltail (loaded-ratio loaded') 1.0))
+        _       (is (< ltail (loaded-ratio loaded) 1.0))
+        _       (is (< (durable-ratio loaded') 1.0))
     
         ; transients conj
         xs      (range -10000 0)
         loaded' (into loaded xs)
         _       (is (every? loaded' xs))
-        lprep   (:loaded-ratio (set/stats loaded'))
-        _       (is (< ltail lprep))
-        _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
+        _       (is (< ltail (loaded-ratio loaded')))
+        _       (is (< (durable-ratio loaded') 1.0))
         
         ; incremental persist
-        _       (reset! *stats {:reads 0, :writes 0})
-        _       (set/store loaded' store-fn)
+        _       (with-stats
+                  (set/store loaded' storage))
         _       (is (< (:writes @*stats) 350)) ;; ~ 10000 / 32 + 10000 / 32 / 32 + 1
-        _       (is (= lprep (:loaded-ratio (set/stats loaded'))))
-        _       (is (= 1.0 (:durable-ratio (set/stats loaded'))))
+        _       (is (= 1.0 (durable-ratio loaded')))
     
         ; transient disj
         xs      (take 100 loaded)
         loaded' (reduce disj loaded xs)
         _       (is (every? #(not (loaded' %)) xs))
-        _       (is (< (:durable-ratio (set/stats loaded')) 1.0))
+        _       (is (< (durable-ratio loaded') 1.0))
         
         ; count fetches everything
         _       (is (= (count loaded) (count original)))
-        l0      (:loaded-ratio (set/stats loaded))
+        l0      (loaded-ratio loaded)
         _       (is (= 1.0 l0))]))
