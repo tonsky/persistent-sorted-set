@@ -88,18 +88,20 @@
          edit      nil
          ->Leaf    (fn [keys]
                      (Leaf. (count keys) keys edit))
-         ->Branch  (fn [^objects children]
+         ->Branch  (fn [level ^objects children]
                      (Branch.
+                       level
                        (count children)
                        ^objects (arrays/amap #(.maxKey ^ANode %) Object children)
                        nil
                        children
                        edit))]
-     (loop [nodes (mapv ->Leaf (split keys len Object avg max))]
+     (loop [level 1
+            nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
          0 (PersistentSortedSet. cmp)
          1 (PersistentSortedSet. {} cmp nil storage (first nodes) len edit 0)
-         (recur (mapv ->Branch (split nodes (count nodes) Object avg max))))))))
+         (recur (inc level) (mapv #(->Branch level %) (split nodes (count nodes) Object avg max))))))))
 
 
 (defn from-sequential
@@ -136,7 +138,7 @@
 (defn walk-addresses
   "consume-fn :: (Address) => void"
   [^PersistentSortedSet set consume-fn]
-  (.walk set consume-fn))
+  (.walkAddresses set consume-fn))
 
 
 (defn store

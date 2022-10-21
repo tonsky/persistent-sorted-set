@@ -85,11 +85,11 @@ public abstract class ANode<Key, Address> {
     return low - 1;
   }
 
-  public static <Key, Address> ANode restore(Key[] keys, Address[] addresses) {
+  public static <Key, Address> ANode restore(int level, Key[] keys, Address[] addresses) {
     if (addresses == null) {
       return new Leaf(keys.length, keys, null);
     } else {
-      return new Branch(keys.length, keys, addresses, null, null);
+      return new Branch(level, keys.length, keys, addresses, null, null);
     }
   }
   
@@ -101,11 +101,13 @@ public abstract class ANode<Key, Address> {
   }
 
   public abstract int count(IStorage storage);
+  // 0 for Leafs, 1+ for Branches
+  public abstract int level();  
   public abstract boolean contains(IStorage storage, Key key, Comparator<Key> cmp);
   public abstract ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, AtomicBoolean edit);
   public abstract ANode[] remove(IStorage storage, Key key, ANode left, ANode right, Comparator<Key> cmp, AtomicBoolean edit);
   public abstract String str(IStorage storage, int lvl);
-  public abstract void walk(IStorage storage, Address address, IFn onAddress);
+  public abstract void walkAddresses(IStorage storage, IFn onAddress);
   public abstract Address store(IStorage<Key, Address> storage);
   public abstract void toString(StringBuilder sb, Address address, String indent);
 

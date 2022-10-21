@@ -152,8 +152,11 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
     }
   }
 
-  public void walk(IFn onAddress) {
-    root().walk(_storage, _address, onAddress);
+  public void walkAddresses(IFn onAddress) {
+    if (_address != null) {
+      onAddress.invoke(_address);
+    }
+    root().walkAddresses(_storage, onAddress);
   }
 
   public Address store() {
@@ -243,7 +246,8 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
       } else if (2 == nodes.length) {
         Object[] keys = new Object[] { nodes[0].maxKey(), nodes[1].maxKey() };
         _address = null;
-        _root = new Branch(2, keys, null, new Object[] { nodes[0], nodes[1] }, _edit);
+        
+        _root = new Branch(nodes[0].level() + 1, 2, keys, null, new Object[] { nodes[0], nodes[1] }, _edit);
       }
       _count = alterCount(1);
       _version += 1;
@@ -256,7 +260,7 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
     Object[] keys = new Object[] { nodes[0].maxKey(), nodes[1].maxKey() };
     Object[] children = Arrays.copyOf(nodes, nodes.length, new Object[0].getClass());
 
-    ANode newRoot = new Branch(2, keys, null, children, _edit);
+    ANode newRoot = new Branch(nodes[0].level() + 1, 2, keys, null, children, _edit);
     return new PersistentSortedSet(_meta, _cmp, null, _storage, newRoot, alterCount(1), _edit, _version + 1);
   }
 

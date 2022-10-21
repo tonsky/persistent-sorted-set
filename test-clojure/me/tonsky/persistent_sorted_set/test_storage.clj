@@ -29,18 +29,19 @@
 
 (defrecord Storage [*memory *disk]
   IStorage
-  (store [_ keys addresses]
+  (store [_ level keys addresses]
     (swap! *stats update :writes inc)
     (let [address (gen-addr)]
       (swap! *disk assoc address
-        {:keys     (vec keys)
+        {:level    level
+         :keys     (vec keys)
          :children (some-> addresses vec)})
       address))
   (restore [_ address]
     (or
       (@*memory address)
-      (let [{:keys [keys children]} (@*disk address)
-            node (ANode/restore (into-array keys) (some-> children into-array))]
+      (let [{:keys [level keys children]} (@*disk address)
+            node (ANode/restore level (into-array keys) (some-> children into-array))]
         (swap! *stats update :reads inc)
         (swap! *memory assoc address node)
         node))))

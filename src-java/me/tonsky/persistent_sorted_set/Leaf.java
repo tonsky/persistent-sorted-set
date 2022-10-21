@@ -16,6 +16,11 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
   }
 
   @Override
+  public int level() {
+    return 0;
+  }
+
+  @Override
   public int count(IStorage storage) {
     return _len;
   }
@@ -212,14 +217,13 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
   }
   
   @Override
-  public void walk(IStorage storage, Address address, IFn onAddress) {
-    onAddress.invoke(address);
+  public void walkAddresses(IStorage storage, IFn onAddress) {
   }
 
   @Override
   public Address store(IStorage<Key, Address> storage) {
     Key[] keys = _len == _keys.length ? _keys : Arrays.copyOfRange(_keys, 0, _len);
-    return storage.store(keys, null);
+    return storage.store(0, keys, null);
   }
 
   @Override
