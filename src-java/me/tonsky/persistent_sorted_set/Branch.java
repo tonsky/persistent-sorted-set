@@ -46,11 +46,25 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     _children  = null;
   }
 
+  public Branch(int level, List<Key> keys, List<Address> addresses) {
+    this(level, keys.size(), (Key[]) keys.toArray(), (Address[]) addresses.toArray(), null, null);
+  }
+
   protected Address[] ensureAddresses() {
     if (_addresses == null) {
       _addresses = (Address[]) new Object[_keys.length];
     }
     return _addresses;
+  }
+
+  public List<Address> addresses() {
+    if (_addresses == null) {
+      return (List<Address>) Arrays.asList(new Object[_len]);
+    } else if (_addresses.length == _len) {
+      return Arrays.asList(_addresses);
+    } else {
+      return Arrays.asList(Arrays.copyOfRange(_addresses, 0, _len));
+    }
   }
   
   public Address address(int idx) {
@@ -600,9 +614,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
         address(i, ((ANode<Key, Address>) _children[i]).store(storage));
       }
     }
-    Key[] keys = _len == _keys.length ? _keys : Arrays.copyOfRange(_keys, 0, _len);
-    Address[] addresses = _len == _addresses.length ? _addresses : Arrays.copyOfRange(_addresses, 0, _len);
-    return storage.store(_level, keys, addresses);
+    return storage.store(this);
   }
 
   public String str(IStorage storage, int lvl) {

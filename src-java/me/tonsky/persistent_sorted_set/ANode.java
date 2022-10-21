@@ -33,6 +33,14 @@ public abstract class ANode<Key, Address> {
     return _keys[_len - 1];
   }
 
+  public List<Key> keys() {
+    if (_keys.length == _len) {
+      return Arrays.asList(_keys);
+    } else {
+      return Arrays.asList(Arrays.copyOfRange(_keys, 0, _len));
+    }
+  }
+
   public boolean editable() {
     return _edit != null && _edit.get();
   }
@@ -85,11 +93,11 @@ public abstract class ANode<Key, Address> {
     return low - 1;
   }
 
-  public static <Key, Address> ANode restore(int level, Key[] keys, Address[] addresses) {
-    if (addresses == null) {
-      return new Leaf(keys.length, keys, null);
+  public static <Key, Address> ANode restore(int level, List<Key> keys, List<Address> addresses) {
+    if (level == 0 || addresses == null) {
+      return new Leaf(keys);
     } else {
-      return new Branch(level, keys.length, keys, addresses, null, null);
+      return new Branch(level, keys, addresses);
     }
   }
   

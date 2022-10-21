@@ -15,6 +15,10 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     super(len, (Key[]) new Object[ANode.newLen(len, edit)], edit);
   }
 
+  public Leaf(List<Key> keys) {
+    this(keys.size(), (Key[]) keys.toArray(), null);
+  }
+
   @Override
   public int level() {
     return 0;
@@ -222,8 +226,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
 
   @Override
   public Address store(IStorage<Key, Address> storage) {
-    Key[] keys = _len == _keys.length ? _keys : Arrays.copyOfRange(_keys, 0, _len);
-    return storage.store(0, keys, null);
+    return storage.store(this);
   }
 
   @Override

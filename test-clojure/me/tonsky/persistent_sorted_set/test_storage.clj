@@ -29,19 +29,23 @@
 
 (defrecord Storage [*memory *disk]
   IStorage
-  (store [_ level keys addresses]
+  (store [_ node]
     (swap! *stats update :writes inc)
-    (let [address (gen-addr)]
+    (let [node    ^ANode node
+          address (gen-addr)]
       (swap! *disk assoc address
-        {:level    level
-         :keys     (vec keys)
-         :children (some-> addresses vec)})
+        {:level     (.level node)
+         :keys      (.keys node)
+         :addresses (when (instance? Branch node)
+                      (.addresses ^Branch node))})
       address))
   (restore [_ address]
     (or
       (@*memory address)
-      (let [{:keys [level keys children]} (@*disk address)
-            node (ANode/restore level (into-array keys) (some-> children into-array))]
+      (let [{:keys [level keys addresses]} (@*disk address)
+            node (if addresses
+                   (Branch. (int level) ^java.util.List keys ^java.util.List addresses)
+                   (Leaf. keys))]
         (swap! *stats update :reads inc)
         (swap! *memory assoc address node)
         node))))
@@ -141,14 +145,14 @@
                          (doseq [i (range len)
                                  :let [addr   (nth (.-_addresses node) i)
                                        child  (.child node storage (int i))
-                                       {:keys [keys children]} (@*storage addr)]]
+                                       {:keys [keys addresses]} (@*storage addr)]]
                            ;; nodes inside stored? has to ALL be stored
                            (when stored?
                              (is (some? addr)))
                            (when (some? addr)
                              (is (= keys 
                                    (take (.len ^ANode child) (.-_keys ^ANode child))))
-                             (is (= children
+                             (is (= addresses
                                    (when (instance? Branch child)
                                      (take (.len ^Branch child) (.-_addresses ^Branch child))))))
                            (invariant child (some? addr))))
