@@ -82,12 +82,12 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     if (_addresses != null || address != null) {
       ensureAddresses();
       _addresses[idx] = address;
-      if (_children != null) {
-        _children[idx] = null;
-      }
-      // if (_children[idx] instanceof ANode) {
-      //   _children[idx] = new SoftReference(_children[idx]);
+      // if (_children != null) {
+      //   _children[idx] = null;
       // }
+      if (_children[idx] instanceof ANode) {
+        _children[idx] = new WeakReference(_children[idx]);
+      }
     }
     return address;
   }
@@ -98,12 +98,18 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
 
     ANode child = null;
     if (_children != null) {
-      child = (ANode) _children[idx];
+      Object ref = _children[idx];
+      if (ref instanceof Reference) {
+        child = (ANode) ((Reference) ref).get();
+      } else {
+        child = (ANode) ref;
+      }
     }
 
     if (child == null) {
+      assert _addresses[idx] != null;
       child = storage.restore(_addresses[idx]);
-      // ensureChildren()[idx] = new SoftReference<ANode>(child);
+      ensureChildren()[idx] = new WeakReference<ANode>(child);
     }
     return child;
   }
@@ -638,8 +644,8 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
       if (_children != null) {
         Object ref = _children[i];
         if (ref != null) {
-          if (ref instanceof SoftReference) {
-            child = (ANode) ((SoftReference) ref).get();
+          if (ref instanceof Reference) {
+            child = (ANode) ((Reference) ref).get();
           } else {
             child = (ANode) ref;
           }

@@ -5,6 +5,7 @@
     [me.tonsky.persistent-sorted-set :as set])
   (:import
     [clojure.lang RT]
+    [java.lang.ref Reference]
     [java.util Comparator Arrays]
     [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet]))
 
@@ -74,7 +75,8 @@
      (println address (contains? memory address) node (memory address)))
    (if (and address (not (contains? memory address)))
      0.0
-     (let [node (or node (memory address))]
+     (let [node (if (instance? Reference node) (.get ^Reference node) node)
+           node (or node (memory address))]
        (if (instance? Leaf node)
          1.0
          (let [node ^Branch node
