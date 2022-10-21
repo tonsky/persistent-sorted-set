@@ -85,7 +85,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
       // if (_children != null) {
       //   _children[idx] = null;
       // }
-      if (_children[idx] instanceof ANode) {
+      if (address != null && _children[idx] instanceof ANode) {
         _children[idx] = new WeakReference(_children[idx]);
       }
     }

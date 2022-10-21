@@ -1,5 +1,6 @@
 (ns me.tonsky.persistent-sorted-set.test-storage
   (:require
+    [clojure.edn :as edn]
     [clojure.string :as str]
     [clojure.test :as t :refer [is are deftest testing]]
     [me.tonsky.persistent-sorted-set :as set])
@@ -15,8 +16,8 @@
   false)
 
 (defn gen-addr []
-  #_(random-uuid)
-  (str (str/join (repeatedly 10 #(rand-nth "ABCDEFGHIJKLMNOPQRSTUVWXYZ")))))
+  (random-uuid)
+  #_(str (str/join (repeatedly 10 #(rand-nth "ABCDEFGHIJKLMNOPQRSTUVWXYZ")))))
 
 (def *stats
   (atom
@@ -35,15 +36,16 @@
     (let [node    ^ANode node
           address (gen-addr)]
       (swap! *disk assoc address
-        {:level     (.level node)
-         :keys      (.keys node)
-         :addresses (when (instance? Branch node)
-                      (.addresses ^Branch node))})
+        (pr-str
+          {:level     (.level node)
+           :keys      (.keys node)
+           :addresses (when (instance? Branch node)
+                        (.addresses ^Branch node))}))
       address))
   (restore [_ address]
     (or
       (@*memory address)
-      (let [{:keys [level keys addresses]} (@*disk address)
+      (let [{:keys [level keys addresses]} (edn/read-string (@*disk address))
             node (if addresses
                    (Branch. (int level) ^java.util.List keys ^java.util.List addresses)
                    (Leaf. keys))]
@@ -134,8 +136,8 @@
         adds      (shuffle (range size))
         removes   (shuffle adds)
         *set      (atom (set/sorted-set))
-        *storage  (atom {})
-        storage   (storage *storage)
+        *disk     (atom {})
+        storage   (storage *disk)
         invariant (fn invariant 
                     ([^PersistentSortedSet o]
                      (invariant (.root o) (some? (.-_address o))))
@@ -147,7 +149,7 @@
                          (doseq [i (range len)
                                  :let [addr   (nth (.-_addresses node) i)
                                        child  (.child node storage (int i))
-                                       {:keys [keys addresses]} (@*storage addr)]]
+                                       {:keys [keys addresses]} (edn/read-string (@*disk addr))]]
                            ;; nodes inside stored? has to ALL be stored
                            (when stored?
                              (is (some? addr)))
