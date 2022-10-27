@@ -110,6 +110,10 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
       assert _addresses[idx] != null;
       child = storage.restore(_addresses[idx]);
       ensureChildren()[idx] = new WeakReference<ANode>(child);
+    } else {
+      if (_addresses != null && _addresses[idx] != null) {
+        storage.accessed(_addresses[idx]);
+      }
     }
     return child;
   }
