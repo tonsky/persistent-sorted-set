@@ -22,11 +22,12 @@
 (def *stats
   (atom
     {:reads 0
-     :writes 0}))
+     :writes 0
+     :accessed 0}))
 
 (defmacro with-stats [& body]
   `(do
-     (reset! *stats {:reads 0 :writes 0})
+     (reset! *stats {:reads 0 :writes 0 :accessed 0})
      ~@body))
 
 (defrecord Storage [*memory *disk]
@@ -42,6 +43,9 @@
            :addresses (when (instance? Branch node)
                         (.addresses ^Branch node))}))
       address))
+  (accessed [_ address]
+    (swap! *stats update :accessed inc)
+    nil)
   (restore [_ address]
     (or
       (@*memory address)

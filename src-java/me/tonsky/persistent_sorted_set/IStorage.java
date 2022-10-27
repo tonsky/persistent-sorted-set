@@ -5,14 +5,20 @@ public interface IStorage<Key, Address> {
      * Given address, reconstruct and (optionally) cache the node.
      * Set itself would not store any strong references to nodes and
      * will request them by address during its operation many times.
-     * 
-     * Use ANode.restore() or Leaf(keys)/Branch(level, keys, addresses) ctors 
+     *
+     * Use ANode.restore() or Leaf(keys)/Branch(level, keys, addresses) ctors
      */
     ANode<Key, Address> restore(Address address);
 
     /**
+     * Tell the storage layer that and address is accessed.
+     * This is needed to track accesses for caching.
+     */
+    void accessed(Address address);
+
+    /**
      * Will be called after all children of node has been stored and have addresses.
-     * 
+     *
      * For node instanceof Leaf, store node.keys()
      * For node instanceof Branch, store node.level(), node.keys() and node.addresses()
      * Generate and return new address for node
