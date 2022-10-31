@@ -4,7 +4,7 @@ import java.util.*;
 import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
-class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
+class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq, ISeek{
   final PersistentSortedSet _set;
   Seq   _parent;
   ANode _node;
@@ -155,5 +155,75 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
       return _set.rslice(_keyTo, atBeginning() ? null : first(), _cmp);
     else
       return _set.slice(_keyTo, atEnd() ? null : first(), _cmp);
+  }
+
+  private static Object minKey (ANode node) {
+    ANode n = node;
+    while (n instanceof Branch) n = (ANode) ((Branch) n)._children[0];
+    return n.minKey();
+  }
+
+  public Seq seek(Object to) { return seek(to, _cmp); }
+  public Seq seek(Object to, Comparator cmp) {
+    if (to == null) throw new RuntimeException("seek can't be called with a nil key!");
+
+    Seq seq = this._parent;
+    ANode node = this._node;
+
+    if (_asc) {
+
+      while (node != null && cmp.compare(node.maxKey(), to) < 0){
+        if (seq == null) {
+          return null;
+        } else {
+          node = seq._node;
+          seq = seq._parent;
+        }
+      }
+
+      while (true) {
+        int idx = node.searchFirst(to, cmp);
+        if (idx < 0)
+          idx = -idx - 1;
+        if (idx == node._len)
+          return null;
+        if (node instanceof Node) {
+          seq = new Seq(null, this._set, seq, node, idx, null, null, true, _version);
+          node = seq.child();
+        } else { // Leaf
+          seq = new Seq(null, this._set, seq, node, idx, this._keyTo, cmp, true, _version);
+          return seq.over() ? null : seq;
+        }
+      }
+
+    } else {
+
+      while (cmp.compare(to, minKey(node)) < 0){
+        if (seq == null) {
+          return null;
+        } else {
+          node = seq._node;
+          seq = seq._parent;
+        }
+      }
+
+      while (true) {
+        if (node instanceof Node) {
+          int idx = node.searchLast(to, cmp) + 1;
+          if (idx == node._len) --idx; // last or beyond, clamp to last
+          seq = new Seq(null, this._set, seq, node, idx, null, null, false, _version);
+          node = seq.child();
+        } else { // Leaf
+          int idx = node.searchLast(to, cmp);
+          if (idx == -1) { // not in this, so definitely in prev
+            seq = new Seq(null, this._set, seq, node, 0, this._keyTo, cmp, false, _version);
+            return seq.advance() ? seq : null;
+          } else { // exact match
+            seq = new Seq(null, this._set, seq, node, idx, this._keyTo, cmp, false, _version);
+            return seq.over() ? null : seq;
+          }
+        }
+      }
+    }
   }
 }

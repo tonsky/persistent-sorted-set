@@ -16,4 +16,8 @@
               "-Duser.language=en-US"
               "-Djdk.attach.allowAttachSelf"
               "-XX:+UnlockDiagnosticVMOptions"
-              "-XX:+DebugNonSafepoints"]}}}
+              "-XX:+DebugNonSafepoints"]}
+  :build
+  {:extra-deps {io.github.clojure/tools.build {:git/tag "v0.8.3" :git/sha "0d20256"
+                                               :exclusions [org.slf4j/slf4j-nop]}}
+   :ns-default build}}}

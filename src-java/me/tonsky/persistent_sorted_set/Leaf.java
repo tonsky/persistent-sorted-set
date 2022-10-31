@@ -39,7 +39,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
-    
+
     int ins = -idx - 1;
     assert 0 <= ins && ins <= _len;
 
@@ -114,12 +114,12 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
         _len = newLen;
         if (idx == newLen) // removed last, need to signal new maxKey
           return new ANode[]{left, this, right};
-        return PersistentSortedSet.EARLY_EXIT;        
+        return PersistentSortedSet.EARLY_EXIT;
       }
 
       // persistent
       Leaf center = new Leaf(newLen, edit);
-      new Stitch(center._keys, 0) 
+      new Stitch(center._keys, 0)
         .copyAll(_keys, 0, idx)
         .copyAll(_keys, idx + 1, _len);
       return new ANode[] { left, center, right };
@@ -187,9 +187,9 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
           newCenterLen = totalLen >>> 1,
           newRightLen  = totalLen - newCenterLen,
           rightHead    = right._len - newRightLen;
-      
+
       Leaf newCenter, newRight;
-      
+
       // append to center
       if (editable() && newCenterLen <= _keys.length) {
         newCenter = this;
@@ -219,7 +219,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     }
     throw new RuntimeException("Unreachable");
   }
-  
+
   @Override
   public void walkAddresses(IStorage storage, IFn onAddress) {
   }
