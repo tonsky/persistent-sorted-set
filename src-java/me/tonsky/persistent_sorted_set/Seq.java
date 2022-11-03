@@ -181,7 +181,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq, ISeek{
           idx = -idx - 1;
         if (idx == node._len)
           return null;
-        if (node instanceof Node) {
+        if (node instanceof Branch) {
           seq = new Seq(null, this._set, seq, node, idx, null, null, true, _version);
           node = seq.child();
         } else { // Leaf
@@ -199,7 +199,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq, ISeek{
       }
 
       while (true) {
-        if (node instanceof Node) {
+        if (node instanceof Branch) {
           int idx = node.searchLast(to, cmp) + 1;
           if (idx == node._len) --idx; // last or beyond, clamp to last
           seq = new Seq(null, this._set, seq, node, idx, null, null, false, _version);

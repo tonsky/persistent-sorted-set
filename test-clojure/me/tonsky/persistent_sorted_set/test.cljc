@@ -437,6 +437,7 @@
                              (set/seek 2500)))))))
 
 (deftest stresstest-seek
+  (println "[ TEST ] stresstest-seek")
   (dotimes [i iters]
     (let [xs        (repeatedly (inc (rand-int 20000)) #(rand-int 20000))
           xs-sorted (distinct (sort xs))
@@ -446,4 +447,5 @@
           set       (into (set/sorted-set) xs)]
       (testing (str "seek to" seek-to)
         (is (= expected-seq (seq (set/seek (seq set) seek-to))))
-        (is (= expected-rseq (seq (set/seek (rseq set) seek-to))))))))
+        (is (= expected-rseq (seq (set/seek (rseq set) seek-to)))))))
+  (println "[ DONE ] stresstest-seek"))
