@@ -4,13 +4,13 @@ import java.util.*;
 import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
-public abstract class APersistentSortedSet extends AFn implements IObj, Counted, IPersistentSet, ILookup, Iterable, Set, java.io.Serializable, IHashEq {
+public abstract class APersistentSortedSet<Key, Address> extends AFn implements IObj, Counted, IPersistentSet, ILookup, Iterable, Set, java.io.Serializable, IHashEq {
   int _hash;
   int _hasheq;
   final IPersistentMap _meta;
-  final Comparator _cmp;
+  final Comparator<Key> _cmp;
 
-  public APersistentSortedSet(IPersistentMap meta, Comparator cmp) {
+  public APersistentSortedSet(IPersistentMap meta, Comparator<Key> cmp) {
     _meta = meta;
     _cmp = cmp;
   }

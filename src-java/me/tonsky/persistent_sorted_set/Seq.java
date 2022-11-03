@@ -6,15 +6,15 @@ import clojure.lang.*;
 @SuppressWarnings("unchecked")
 class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
   final PersistentSortedSet _set;
-  Seq  _parent;
-  Leaf _node;
-  int  _idx;
+  Seq   _parent;
+  ANode _node;
+  int   _idx;
   final Object _keyTo;
   final Comparator _cmp;
   final boolean _asc;
   final int _version;
 
-  Seq(IPersistentMap meta, PersistentSortedSet set, Seq parent, Leaf node, int idx, Object keyTo, Comparator cmp, boolean asc, int version) {
+  Seq(IPersistentMap meta, PersistentSortedSet set, Seq parent, ANode node, int idx, Object keyTo, Comparator cmp, boolean asc, int version) {
     super(meta);
     _set = set;
     _parent = parent;
@@ -31,9 +31,9 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
       throw new RuntimeException("Tovarisch, you are iterating and mutating a transient set at the same time!");
   }
 
-  Leaf child() {
-    assert _node instanceof Node;
-    return ((Node) _node)._children[_idx];
+  ANode child() {
+    assert _node instanceof Branch : _node;
+    return ((Branch) _node).child(_set._storage, _idx);
   }
 
   boolean over() {
@@ -45,7 +45,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
   boolean advance() {
     checkVersion();
     if (_asc) {
-      if (_idx < _node._len-1) {
+      if (_idx < _node._len - 1) {
         _idx++;
         return !over();
       } else if (_parent != null) {
@@ -79,7 +79,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
   // ASeq
   public Object first() {
     checkVersion();
-    // assert !(_node instanceof Node);
+    // assert _node.leaf();
     return _node._keys[_idx];
   }
 
@@ -129,7 +129,7 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq {
     if (_parent == null) return null;
     Seq nextParent = _parent.next();
     if (nextParent == null) return null;
-    Leaf node = nextParent.child();
+    ANode node = nextParent.child();
     Seq seq = new Seq(meta(), _set, nextParent, node, _asc ? 0 : node._len - 1, _keyTo, _cmp, _asc, _version);
     return seq.over() ? null : seq;
   }

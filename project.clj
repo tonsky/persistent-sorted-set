@@ -1,10 +1,10 @@
-(defproject persistent-sorted-set "0.1.4"
+(defproject persistent-sorted-set "0.2.0"
   :description "Fast B-tree based persistent sorted set for Clojure/Script"
   :license {:name "MIT"}
   :url "https://github.com/tonsky/persistent-sorted-set"
   
   :dependencies [
-    [org.clojure/clojure       "1.10.0"   :scope "provided"]
+    [org.clojure/clojure       "1.11.1"   :scope "provided"]
     [org.clojure/clojurescript "1.10.520" :scope "provided"]
   ]
   
@@ -28,7 +28,8 @@
   :profiles {
     :1.9 {:dependencies [[org.clojure/clojure         "1.9.0"   :scope "provided"]
                          [org.clojure/clojurescript   "1.9.946" :scope "provided"]] }
-    :bench {:dependencies [[com.datomic/datomic-free "0.9.5703"]]
-            :java-source-paths ["bench-java"] }
+    :bench {:dependencies [[com.datomic/datomic-pro "1.0.6397"]]
+            :java-source-paths ["bench-java"]
+            :jvm-opts ["-server"]}
   }
 )
