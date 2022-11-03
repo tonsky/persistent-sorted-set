@@ -1,3 +1,10 @@
+# 0.2.0
+
+Added:
+
+- Durability in Clojure version #7 with @whilo
+- `IStorage`, `store`, `restore`, `restore-by`, `walk-addresses`, `set-branching-factor!`
+
 # 0.1.4
 
 Special handling of nils in slice/rslice in CLJS, matching CLJ behaviour #6

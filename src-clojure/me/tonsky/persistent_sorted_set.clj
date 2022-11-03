@@ -126,22 +126,32 @@
 
   
 (defn restore-by
+  "Constructs lazily-loaded set from storage, root address and custom comparator. 
+   Supports all operations that normal in-memory impl would,
+   will fetch missing nodes by calling IStorage::restore when needed"
   [cmp address ^IStorage storage]
   (PersistentSortedSet. nil cmp address storage nil -1 nil 0))
 
 
 (defn restore 
+  "Constructs lazily-loaded set from storage and root address. 
+   Supports all operations that normal in-memory impl would,
+   will fetch missing nodes by calling IStorage::restore when needed"
   [address ^IStorage storage]
   (restore-by RT/DEFAULT_COMPARATOR address storage))
 
 
 (defn walk-addresses
-  "consume-fn :: (Address) => void"
+  "Visit each address used by this set. Usable for cleaning up
+   garbage left in storage from previous versions of the set"
   [^PersistentSortedSet set consume-fn]
   (.walkAddresses set consume-fn))
 
 
 (defn store
+  "Store each not-yet-stored node by calling IStorage::store and remembering
+   returned address. Incremental, won’t store same node twice on subsequent calls.
+   Returns root address. Remember it and use it for restore"
   ([^PersistentSortedSet set]
    (.store set))
   ([^PersistentSortedSet set ^IStorage storage]

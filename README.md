@@ -28,7 +28,7 @@ lein jar
 Dependency:
 
 ```clj
-[persistent-sorted-set "0.1.4"]
+[persistent-sorted-set "0.2.0"]
 ```
 
 Code:
@@ -62,6 +62,113 @@ Code:
 (set/sorted-set-by > 1 2 3)
 ;=> #{3 2 1}
 ```
+
+## Durability
+
+Clojure version allows efficient storage of Persistent Sorted Set on disk/DB/anywhere.
+
+To do that, implement `IStorage` interface:
+
+```clojure
+(defrecord Storage [*storage]
+  IStorage
+  (store [_ node]
+    (let [address (random-uuid)]
+      (swap! *storage assoc address
+        (pr-str
+          (if (instance? Branch node)
+            {:level     (.level ^Branch node)
+             :keys      (.keys ^Branch node)
+             :addresses (.addresses ^Branch node)}
+            (.keys ^Leaf node))))
+      address))
+    
+  (restore [_ address]
+    (let [value (-> (get @*storage address)
+                  (edn/read-string))]
+      (if (map? value)
+        (Branch. (int (:level value)) ^java.util.List (:keys value) ^java.util.List (:addresses value))
+        (Leaf. ^java.util.List value)))))
+```
+
+Storing Persistent Sorted Set works per node. This will save each node once:
+
+```clojure
+(def set
+  (into (set/sorted-set) (range 1000000)))
+
+(def storage
+  (Storage. (atom {})))
+
+(def root
+  (set/store set storage))
+```
+
+If you try to store once again, no store operations will be issued:
+
+```clojure
+(assert
+  (= root
+    (set/store set storage)))
+```
+
+If you modify set and store new one, only nodes that were changed will be stored. For a tree of depth 3, it’s usually just \~3 nodes. The root will be new, though:
+
+```clojure
+(def set2
+  (into set [-1 -2 -3]))
+
+(assert
+  (not= root
+    (set/store set2 storage)))
+```
+
+Finally, one can construct a new set from its stored snapshot. You’ll need address for that:
+
+```clojure
+(def set-lazy
+  (set/restore root storage))
+```
+
+Restore operation is lazy. By default it won’t do anything, but when you start accessing returned set, `IStorage::restore` operations will be issued and part of the set will be reconstructed in memory. Only nodes needed for a particular operation will be loaded.
+
+E.g. this will load \~3 nodes for a set of depth 3:
+
+```clojure
+(first set-lazy)
+```
+
+This will load \~50 nodes on default settings:
+
+```clojure
+(take 5000 set-lazy)
+```
+
+Internally Persistent Sorted Set does not caches returned nodes, so don’t be surprised if subsequent `first` loads the same nodes again. One must implement cache inside IStorage implementation for efficient retrieval of already loaded nodes. Also see `IStorage::accessed` for access stats, e.g. for LRU.
+
+Any operation that can be done on in-memory PSS can be done on a lazy one, too. It will fetch required nodes when needed, completely transparently for the user. Lazy PSS can exist arbitrary long without ever being fully realized in memory:
+
+```clojure
+(def set3
+  (conj set-lazy [-1 -2 -3]))
+
+(def set4
+  (disj set-lazy [4 5 6 7 8]))
+
+(contains? set-lazy 5000)
+```
+
+Last piece of the puzzle: `set/walk-addresses`. Use it to check which nodes are actually in use by current PSS and optionally clean up garbage in your storage that is not referenced by it anymore:
+
+```clojure
+(let [*alive-addresses (volatile! [])]
+  (set/walk-addresses set #(vswap! *alive-addresses conj %))
+  @*alive-addresses)
+```
+
+See [test_storage.clj](test-clojure/me/tonsky/persistent_sorted_set/test_storage.clj) for more examples.
+
+Durability for ClojureScript is not yet supported.
 
 ## Performance
 
