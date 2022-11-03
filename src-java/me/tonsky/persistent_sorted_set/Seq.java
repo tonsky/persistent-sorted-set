@@ -157,12 +157,6 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq, ISeek{
       return _set.slice(_keyTo, atEnd() ? null : first(), _cmp);
   }
 
-  private static Object minKey (ANode node) {
-    ANode n = node;
-    while (n instanceof Branch) n = (ANode) ((Branch) n)._children[0];
-    return n.minKey();
-  }
-
   public Seq seek(Object to) { return seek(to, _cmp); }
   public Seq seek(Object to, Comparator cmp) {
     if (to == null) throw new RuntimeException("seek can't be called with a nil key!");
@@ -198,13 +192,10 @@ class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq, ISeek{
 
     } else {
 
-      while (cmp.compare(to, minKey(node)) < 0){
-        if (seq == null) {
-          return null;
-        } else {
-          node = seq._node;
-          seq = seq._parent;
-        }
+      // NOTE: We can't shortcircuit here as we don't know the minKey. Might go up one level too high.
+      while (cmp.compare(to, node.minKey()) < 0 && seq != null){
+        node = seq._node;
+        seq = seq._parent;
       }
 
       while (true) {
