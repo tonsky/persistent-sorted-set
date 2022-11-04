@@ -421,8 +421,9 @@
       (is (= (range 500 -1 -1) (-> set-rseq (set/seek 750) (set/seek 500))))
       (is (= (range 0 501) (-> set-rseq (set/seek 750) (set/seek 500) rseq))))
 
-    (testing "nil behaviour"
-      (is (thrown-with-msg? Exception #"seek can't be called with a nil key!" (set/seek set-seq nil))))
+    #?(:clj
+       (testing "nil behaviour"
+         (is (thrown-with-msg? Exception #"seek can't be called with a nil key!" (set/seek set-seq nil)))))
 
     (testing "slicing together with seek"
       (is (= (range 5000 7501) (-> (set/slice (apply set/sorted-set (range 10000)) 2500 7500)
