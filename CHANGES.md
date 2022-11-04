@@ -1,3 +1,9 @@
+# 0.2.1
+
+Added:
+
+- `seek` to jump ahead during iteration #9 via @FiV0
+
 # 0.2.0
 
 Added:
