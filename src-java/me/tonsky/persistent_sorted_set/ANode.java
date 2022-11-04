@@ -29,6 +29,10 @@ public abstract class ANode<Key, Address> {
     return _len;
   }
 
+  public Key minKey() {
+    return _keys[0];
+  }
+
   public Key maxKey() {
     return _keys[_len - 1];
   }
@@ -100,7 +104,7 @@ public abstract class ANode<Key, Address> {
       return new Branch(level, keys, addresses);
     }
   }
-  
+
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
@@ -110,7 +114,7 @@ public abstract class ANode<Key, Address> {
 
   public abstract int count(IStorage storage);
   // 0 for Leafs, 1+ for Branches
-  public abstract int level();  
+  public abstract int level();
   public abstract boolean contains(IStorage storage, Key key, Comparator<Key> cmp);
   public abstract ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, AtomicBoolean edit);
   public abstract ANode[] remove(IStorage storage, Key key, ANode left, ANode right, Comparator<Key> cmp, AtomicBoolean edit);

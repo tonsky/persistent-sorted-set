@@ -62,6 +62,19 @@ Code:
 (set/sorted-set-by > 1 2 3)
 ;=> #{3 2 1}
 ```
+One can also efficiently seek on the iterators.
+
+```clj
+(-> (seq (into (set/sorted-set) (range 10)))
+    (set/seek 5))
+;; => (5 6 7 8 9)
+
+(-> (into (set/sorted-set) (range 100))
+    (set/rslice 75 25)
+    (set/seek 60)
+    (set/seek 30))
+;; => (30 29 28 27 26 25)
+```
 
 ## Durability
 

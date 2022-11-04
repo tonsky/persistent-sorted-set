@@ -30,11 +30,11 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
   public PersistentSortedSet() {
     this(null, RT.DEFAULT_COMPARATOR);
   }
-  
+
   public PersistentSortedSet(Comparator<Key> cmp) {
     this(null, cmp);
   }
-  
+
   public PersistentSortedSet(IPersistentMap meta, Comparator<Key> cmp) {
     this(meta, cmp, null, null, new Leaf<Key, Address>(0, null), 0, null, 0);
   }
@@ -246,7 +246,7 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
       } else if (2 == nodes.length) {
         Object[] keys = new Object[] { nodes[0].maxKey(), nodes[1].maxKey() };
         _address = null;
-        
+
         _root = new Branch(nodes[0].level() + 1, 2, keys, null, new Object[] { nodes[0], nodes[1] }, _edit);
       }
       _count = alterCount(1);
@@ -256,7 +256,7 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
 
     if (1 == nodes.length)
       return new PersistentSortedSet(_meta, _cmp, null, _storage, nodes[0], alterCount(1), _edit, _version + 1);
-    
+
     Object[] keys = new Object[] { nodes[0].maxKey(), nodes[1].maxKey() };
     Object[] children = Arrays.copyOf(nodes, nodes.length, new Object[0].getClass());
 
@@ -269,7 +269,7 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
     return disjoin(key, _cmp);
   }
 
-  public PersistentSortedSet disjoin(Object key, Comparator cmp) { 
+  public PersistentSortedSet disjoin(Object key, Comparator cmp) {
     ANode[] nodes = root().remove(_storage, (Key) key, null, null, cmp, _edit);
 
     // not in set

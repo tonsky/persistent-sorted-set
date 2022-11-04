@@ -9,7 +9,7 @@
     [java.lang.ref SoftReference]
     [java.util Comparator Arrays]
     [java.util.function BiConsumer]
-    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet]))
+    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet Seq]))
 
 (set! *warn-on-reflection* true)
 
@@ -45,6 +45,16 @@
    (.rslice set from to))
   ([^PersistentSortedSet set from to ^Comparator cmp]
    (.rslice set from to cmp)))
+
+
+(defn seek
+  "An efficient way to seek to a specific key in a seq (either returned by [[clojure.core.seq]] or a slice.)
+  `(seek (seq set) to)` returns iterator for all Xs where to <= X.
+  Optionally pass in comparator that will override the one that set uses."
+  ([seq to]
+   (.seek ^Seq seq to))
+  ([seq to cmp]
+   (.seek ^Seq seq to ^Comparator cmp)))
 
 
 (defn- array-from-indexed [coll type from to]
@@ -124,17 +134,17 @@
   ([] (PersistentSortedSet/EMPTY))
   ([& keys] (from-sequential compare keys)))
 
-  
+
 (defn restore-by
-  "Constructs lazily-loaded set from storage, root address and custom comparator. 
+  "Constructs lazily-loaded set from storage, root address and custom comparator.
    Supports all operations that normal in-memory impl would,
    will fetch missing nodes by calling IStorage::restore when needed"
   [cmp address ^IStorage storage]
   (PersistentSortedSet. nil cmp address storage nil -1 nil 0))
 
 
-(defn restore 
-  "Constructs lazily-loaded set from storage and root address. 
+(defn restore
+  "Constructs lazily-loaded set from storage and root address.
    Supports all operations that normal in-memory impl would,
    will fetch missing nodes by calling IStorage::restore when needed"
   [address ^IStorage storage]

@@ -550,6 +550,13 @@
 (defprotocol IIter
   (-copy [this left right]))
 
+(defprotocol ISeek
+  (-seek
+    [this key]
+    [this key comparator]))
+
+(declare -seek* -rseek*)
+
 (deftype Iter [set left right keys idx]
   IIter
   (-copy [_ l r]
@@ -634,6 +641,16 @@
     (when keys
       (riter set (prev-path set left) (prev-path set right))))
 
+  ISeek
+  (-seek [this key] (-seek this key (.-comparator set)))
+  (-seek [this key cmp]
+    (cond
+      (nil? key) (throw (js/Error. "seek can't be called with a nil key!"))
+      (nat-int? (cmp (arrays/aget keys idx) key)) this
+      :else (let [new-left (-seek* set key cmp)]
+              (when-not (neg? new-left)
+                (Iter. set new-left right (keys-for set new-left) (path-get new-left 0))))))
+
   Object
   (toString [this] (pr-str* this))
 
@@ -684,6 +701,17 @@
             new-right (if (== new-right -1) (inc right) new-right)]
         (iter set new-left new-right))))
 
+  ISeek
+  (-seek [this key] (-seek this key (.-comparator set)))
+  (-seek [this key cmp]
+    (cond
+      (nil? key) (throw (js/Error. "seek can't be called with a nil key!"))
+      (nat-int? (cmp key (arrays/aget keys idx))) this
+      :else
+      (let [new-right (dec (-rseek* set key cmp))]
+        (when (and (nat-int? new-right) (<= left new-right) (< new-right right))
+          (ReverseIter. set left new-right (keys-for set new-right) (path-get new-right 0))))))
+
   Object
   (toString [this] (pr-str* this))
 
@@ -723,7 +751,7 @@
 
 ;; Slicing
 
-(defn- -seek
+(defn- -seek*
   "Returns path to first element >= key,
    or -1 if all elements in a set < key"
   [set key comparator]
@@ -743,7 +771,7 @@
                    (path-set path level idx)
                    (- level level-shift))))))))
 
-(defn- -rseek
+(defn- -rseek*
   "Returns path to the first element that is > key.
    If all elements in a set are <= key, returns `(-rpath set) + 1`.
    It’s a virtual path that is bigger than any path in a tree"
@@ -765,9 +793,9 @@
                    (- level level-shift))))))))
 
 (defn- -slice [set key-from key-to comparator]
-  (let [path (-seek set key-from comparator)]
+  (let [path (-seek* set key-from comparator)]
     (when-not (neg? path)
-      (let [till-path (-rseek set key-to comparator)]
+      (let [till-path (-rseek* set key-to comparator)]
         (when (> till-path path)
           (Iter. set path till-path (keys-for set path) (path-get path 0)))))))
 
@@ -906,6 +934,16 @@
     (some-> (-slice set key-to key-from (.-comparator set)) rseq))
   ([set key-from key-to comparator]
     (some-> (-slice set key-to key-from comparator) rseq)))
+
+
+(defn seek
+  "An efficient way to seek to a specific key in a seq (either returned by [[clojure.core.seq]] or a slice.)
+  `(seek (seq set) to)` returns iterator for all Xs where to <= X.
+  Optionally pass in comparator that will override the one that set uses."
+  ([seq to]
+   (-seek seq to))
+  ([seq to cmp]
+   (-seek seq to cmp)))
 
 
 (defn from-sorted-array
