@@ -4,7 +4,7 @@ import java.util.*;
 import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
-class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq, ISeek{
+public class Seq extends ASeq implements IReduce, Reversible, IChunkedSeq, ISeek{
   final PersistentSortedSet _set;
   Seq   _parent;
   ANode _node;
