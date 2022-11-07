@@ -16,5 +16,4 @@
             :basis basis}))
 
 (comment
-  (java nil)
-  )
+  (java nil))

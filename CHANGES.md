@@ -1,3 +1,7 @@
+# 0.2.2
+
+- Made Seq class public #11 via @FiV0
+
 # 0.2.1
 
 Added:
