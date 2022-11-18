@@ -450,3 +450,9 @@
         (is (= expected-seq (seq (set/seek (seq set) seek-to))))
         (is (= expected-rseq (seq (set/seek (rseq set) seek-to)))))))
   (println "[ DONE ] stresstest-seek"))
+
+(deftest test-overflow
+  (println "[ TEST ] test-overflow")
+  (let [s (into (set/sorted-set) (range 4000000))]
+    (is (= 10 (count (take 10 s)))))
+  (println "[ DONE ] test-overflow"))

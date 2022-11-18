@@ -8,7 +8,6 @@
   (:require-macros
     [me.tonsky.persistent-sorted-set.arrays :as arrays]))
 
-
 ; B+ tree
 ; -------
 
@@ -48,15 +47,50 @@
                                      first
                                      inc))
 (def ^:private ^:const path-mask (dec (bit-shift-left 1 level-shift)))
-(def ^:private ^:const empty-path 0)
+; (def ^:private ^:const max-level 8)
+(def ^:private ^:const empty-path 0 #_(js/Uint8Array. max-level))
 
 (defn- path-get [path level]
   (bit-and path-mask
-           (unsigned-bit-shift-right path level)))
+    (unsigned-bit-shift-right path level)))
+  ; (aget path (quot level level-shift)))
 
 (defn- path-set [path level idx]
-  (bit-or path 
-          (bit-shift-left idx level)))
+  (-> path
+    (bit-and (bit-not (bit-shift-left path-mask level)))
+    (bit-or (bit-shift-left idx level))))
+  ; (let [path' (js/Uint8Array. path)]
+  ;   (aset path' (quot level level-shift) idx)
+  ;   path'))
+
+(defn- path-inc [path]
+  (inc path))
+  ; (path-set path 0 (inc (path-get path 0))))
+
+(defn- path-dec [path]
+  (dec path))
+  ; (path-set path 0 (inc (path-get path 0))))
+
+(defn- path-cmp [path1 path2]
+  (- path1 path2))
+  ; (loop [level (dec max-level)]
+  ;   (if (< level 0)
+  ;     0
+  ;     (let [i1 (path-get path1 level)
+  ;           i2 (path-get path2 level)]
+  ;       (cond
+  ;         (< i1 i2) -1
+  ;         (> i1 i2) 1
+  ;         :else     (recur (dec level)))))))
+
+(defn- path-lt [path1 path2]
+  (< (path-cmp path1 path2) 0))
+
+(defn- path-lte [path1 path2]
+  (<= (path-cmp path1 path2) 0))
+
+(defn- path-eq [path1 path2]
+  (== 0 (path-cmp path1 path2)))
 
 (defn- binary-search-l [cmp arr r k]
   (loop [l 0
@@ -435,16 +469,17 @@
 
 (defn- -next-path [node path level]
   (let [idx (path-get path level)]
+    ; (println "-next-path" path level idx)
     (if (pos? level)
       ;; inner node
       (let [sub-path (-next-path (arrays/aget (.-pointers node) idx) path (- level level-shift))]
-        (if (== -1 sub-path)
+        (if (nil? sub-path)
           ;; nested node overflow
           (if (< (inc idx) (arrays/alength (.-pointers node)))
             ;; advance current node idx, reset subsequent indexes
             (path-set empty-path level (inc idx))
             ;; current node overflow
-            -1)
+            nil)
           ;; keep current idx
           (path-set sub-path level idx)))
       ;; leaf
@@ -452,13 +487,7 @@
         ;; advance leaf idx
         (path-set empty-path 0 (inc idx))
         ;; leaf overflow
-        -1))))
-
-(defn- next-path
-  "Returns path representing next item after `path` in natural traversal order,
-   or -1 if end of tree has been reached"
-  [set path]
-  (-next-path (.-root set) path (.-shift set)))
+        nil))))
 
 (defn- -rpath
   "Returns rightmost path possible starting from node and going deeper"
@@ -468,11 +497,22 @@
          level level]
     (if (pos? level)
       ;; inner node
-      (recur (arrays/alast (.-pointers node))
-             (path-set path level (dec (arrays/alength (.-pointers node))))
-             (- level level-shift))
+      (recur
+        (arrays/alast (.-pointers node))
+        (path-set path level (dec (arrays/alength (.-pointers node))))
+        (- level level-shift))
       ;; leaf
       (path-set path 0 (dec (arrays/alength (.-keys node)))))))
+
+(defn- next-path
+  "Returns path representing next item after `path` in natural traversal order.
+   Will overflow at leaf if at the end of the tree"
+  [set path]
+  (if (path-eq (path-dec empty-path) path)
+    empty-path
+    (or
+      (-next-path (.-root set) path (.-shift set))
+      (path-inc (-rpath (.-root set) (.-shift set))))))
 
 (defn- -prev-path [node path level]
   (let [idx (path-get path level)]
@@ -480,7 +520,7 @@
       ;; inner node
       (let [sub-level (- level level-shift)
             sub-path  (-prev-path (arrays/aget (.-pointers node) idx) path sub-level)]
-        (if (== -1 sub-path)
+        (if (nil? sub-path)
           ;; nested node overflow
           (if (>= (dec idx) 0)
             ;; advance current node idx, reset subsequent indexes
@@ -488,7 +528,7 @@
                   sub-path (-rpath (arrays/aget (.-pointers node) idx) sub-level)]
               (path-set sub-path level idx))
             ;; current node overflow
-            -1)
+            nil)
           ;; keep current idx
           (path-set sub-path level idx)))
       ;; leaf
@@ -496,13 +536,15 @@
         ;; advance leaf idx
         (path-set empty-path 0 (dec idx))
         ;; leaf overflow
-        -1))))
+        nil))))
 
 (defn- prev-path
-  "Returns path representing previous item before `path` in natural traversal order,
-   or -1 if `path` was already beginning of a tree"
+  "Returns path representing previous item before `path` in natural traversal order.
+   Will overflow at leaf if at beginning of tree"
   [set path]
-  (-prev-path (.-root set) path (.-shift set)))
+  (or
+    (-prev-path (.-root set) path (.-shift set))
+    (path-dec empty-path)))
 
 (declare iter riter)
 
@@ -510,8 +552,8 @@
   "Iterator that represents the whole set"
   [set]
   (when (pos? (node-len (.-root set)))
-    (let [left   empty-path
-          right  (inc (-rpath (.-root set) (.-shift set)))]
+    (let [left  empty-path
+          right (next-path set (-rpath (.-root set) (.-shift set)))]
       (iter set left right))))
 
 ;; replace with cljs.core/ArrayChunk after https://dev.clojure.org/jira/browse/CLJS-2470
@@ -522,6 +564,7 @@
   IIndexed
   (-nth [this i]
     (aget arr (+ off i)))
+  
   (-nth [this i not-found]
     (if (and (>= i 0) (< i (- end off)))
       (aget arr (+ off i))
@@ -538,6 +581,7 @@
     (if (== off end)
       (f)
       (-reduce (-drop-first this) f (aget arr off))))
+  
   (-reduce [this f start]
     (loop [val start, n off]
       (if (< n end)
@@ -574,24 +618,27 @@
     (when keys
       (arrays/aget keys idx)))
 
-  (-rest [this] (or (-next this) ()))
+  (-rest [this]
+    (or (-next this) ()))
 
   INext
   (-next [this]
     (when keys
       (if (< (inc idx) (arrays/alength keys))
         ;; can use cached array to move forward
-        (when (< (inc left) right)
-          (Iter. set (inc left) right keys (inc idx)))
+        (let [left' (path-inc left)]
+          (when (path-lt left' right)
+            (Iter. set left' right keys (inc idx))))
         (let [left' (next-path set left)]
-          (when (and (not= -1 left') (< left' right))
+          (when (path-lt left' right)
             (-copy this left' right))))))
 
   IChunkedSeq
   (-chunked-first [this]
-    (let [end-idx (if (= (bit-or left path-mask)
-                         (bit-or right path-mask))
-                    (bit-and right path-mask)
+    (let [end-idx (if (path-eq (path-set left 0 0) (path-set right 0 0))
+                    ;; right is in the same node
+                    (path-get right 0)
+                    ;; right is in a different node
                     (arrays/alength keys))]
       (Chunk. keys idx end-idx)))
 
@@ -600,8 +647,9 @@
 
   IChunkedNext
   (-chunked-next [this]
-    (let [left' (next-path set (+ left (- (arrays/alength keys) idx 1)))]
-      (when (and (not= -1 left') (< left' right))
+    (let [last  (path-set left 0 (dec (arrays/alength keys)))
+          left' (next-path set last)]
+      (when (path-lt left' right)
         (-copy this left' right))))
            
   IReduce
@@ -626,14 +674,15 @@
             @new-acc
 
             (< (inc idx) (arrays/alength keys)) ;; can use cached array to move forward
-            (if (< (inc left) right)
-              (recur (inc left) keys (inc idx) new-acc)
-              new-acc)
+            (let [left' (path-inc left)]
+              (if (path-lt left' right)
+                (recur left' keys (inc idx) new-acc)
+                new-acc))
 
             :else
-            (let [new-left (next-path set left)]
-              (if (and (not (== -1 new-left)) (< new-left right))
-                (recur new-left (keys-for set new-left) (path-get new-left 0) new-acc)
+            (let [left' (next-path set left)]
+              (if (path-lt left' right)
+                (recur left' (keys-for set left') (path-get left' 0) new-acc)
                 new-acc)))))))
 
   IReversible
@@ -645,11 +694,16 @@
   (-seek [this key] (-seek this key (.-comparator set)))
   (-seek [this key cmp]
     (cond
-      (nil? key) (throw (js/Error. "seek can't be called with a nil key!"))
-      (nat-int? (cmp (arrays/aget keys idx) key)) this
-      :else (let [new-left (-seek* set key cmp)]
-              (when-not (neg? new-left)
-                (Iter. set new-left right (keys-for set new-left) (path-get new-left 0))))))
+      (nil? key)
+      (throw (js/Error. "seek can't be called with a nil key!"))
+      
+      (nat-int? (cmp (arrays/aget keys idx) key))
+      this
+      
+      :else
+      (let [left' (-seek* set key cmp)]
+        (when-not (neg? left')
+          (Iter. set left' right (keys-for set left') (path-get left' 0))))))
 
   Object
   (toString [this] (pr-str* this))
@@ -680,37 +734,45 @@
     (when keys
       (arrays/aget keys idx)))
 
-  (-rest [this]  (or (-next this) ()))
+  (-rest [this]
+    (or (-next this) ()))
 
   INext
   (-next [this]
     (when keys
-      (if (>= (dec idx) 0)
+      (if (> idx 0)
         ;; can use cached array to advance
-        (when (> (dec right) left)
-          (ReverseIter. set left (dec right) keys (dec idx)))
-        (let [right (prev-path set right)]
-          (when (and (not= -1 right) (> right left))
-            (-copy this left right))))))
+        (let [right' (path-dec right)]
+          (when (path-lt left right')
+            (ReverseIter. set left right' keys (dec idx))))
+        (let [right' (prev-path set right)]
+          (when (path-lt left right')
+            (-copy this left right'))))))
 
   IReversible
   (-rseq [this]
     (when keys
-      (let [new-left  (if (== left -1) 0 (next-path set left))
-            new-right (next-path set right)
-            new-right (if (== new-right -1) (inc right) new-right)]
-        (iter set new-left new-right))))
+      (iter set (next-path set left) (next-path set right))))
 
   ISeek
-  (-seek [this key] (-seek this key (.-comparator set)))
+  (-seek [this key]
+    (-seek this key (.-comparator set)))
+  
   (-seek [this key cmp]
     (cond
-      (nil? key) (throw (js/Error. "seek can't be called with a nil key!"))
-      (nat-int? (cmp key (arrays/aget keys idx))) this
+      (nil? key)
+      (throw (js/Error. "seek can't be called with a nil key!"))
+      
+      (nat-int? (cmp key (arrays/aget keys idx)))
+      this
+      
       :else
-      (let [new-right (dec (-rseek* set key cmp))]
-        (when (and (nat-int? new-right) (<= left new-right) (< new-right right))
-          (ReverseIter. set left new-right (keys-for set new-right) (path-get new-right 0))))))
+      (let [right' (path-dec (-rseek* set key cmp))]
+        (when (and
+                (nat-int? right')
+                (path-lte left right')
+                (path-lt  right' right))
+          (ReverseIter. set left right' (keys-for set right') (path-get right' 0))))))
 
   Object
   (toString [this] (pr-str* this))
@@ -740,10 +802,17 @@
 
 (defn- distance [set path-l path-r]
   (cond
-    (== path-l path-r) 0
-    (== (inc path-l) path-r) 1
-    (== (next-path set path-l) path-r) 1
-    :else (-distance (.-root set) path-l path-r (.-shift set))))
+    (path-eq path-l path-r)
+    0
+    
+    (path-eq (path-inc path-l) path-r)
+    1
+    
+    (path-eq (next-path set path-l) path-r)
+    1
+    
+    :else
+    (-distance (.-root set) path-l path-r (.-shift set))))
 
 (defn est-count [iter]
   (distance (.-set iter) (.-left iter) (.-right iter)))
@@ -764,12 +833,15 @@
         (if (== 0 level)
           (let [keys (.-keys node)
                 idx  (binary-search-l comparator keys (dec keys-l) key)]
-            (if (== keys-l idx) -1 (path-set path 0 idx)))
+            (if (== keys-l idx)
+              -1
+              (path-set path 0 idx)))
           (let [keys (.-keys node)
                 idx  (binary-search-l comparator keys (- keys-l 2) key)]
-            (recur (arrays/aget (.-pointers node) idx)
-                   (path-set path level idx)
-                   (- level level-shift))))))))
+            (recur
+              (arrays/aget (.-pointers node) idx)
+              (path-set path level idx)
+              (- level level-shift))))))))
 
 (defn- -rseek*
   "Returns path to the first element that is > key.
@@ -777,7 +849,7 @@
    It’s a virtual path that is bigger than any path in a tree"
   [set key comparator]
   (if (nil? key)
-    (inc (-rpath (.-root set) (.-shift set)))
+    (path-inc (-rpath (.-root set) (.-shift set)))
     (loop [node  (.-root set)
            path  empty-path
            level (.-shift set)]
@@ -788,9 +860,10 @@
             (path-set path 0 idx))
           (let [keys (.-keys node)
                 idx  (binary-search-r comparator keys (- keys-l 2) key)]
-            (recur (arrays/aget (.-pointers node) idx)
-                   (path-set path level idx)
-                   (- level level-shift))))))))
+            (recur
+              (arrays/aget (.-pointers node) idx)
+              (path-set path level idx)
+              (- level level-shift))))))))
 
 (defn- -slice [set key-from key-to comparator]
   (let [path (-seek* set key-from comparator)]
