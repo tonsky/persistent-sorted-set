@@ -1,0 +1,13 @@
+{:source-paths ["src-clojure" "test-clojure" "bench-clojure"]
+ :builds
+ {:bench
+  {:target           :node-script
+   :main             me.tonsky.persistent-sorted-set.bench/-main
+   :output-to        "target/bench.js"
+   :compiler-options {:infer-externs true}}
+  
+  :test
+  {:target           :node-test
+   :output-to        "target/test.js"
+   :ns-regexp        "test"
+   :compiler-options {:infer-externs true}}}}

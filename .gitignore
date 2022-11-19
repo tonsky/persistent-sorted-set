@@ -5,3 +5,5 @@ target
 .idea
 pom.xml
 bench-clojure/*.edn
+node_modules
+.shadow-cljs

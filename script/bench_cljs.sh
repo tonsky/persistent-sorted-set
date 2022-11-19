@@ -2,4 +2,5 @@
 set -o errexit -o nounset -o pipefail
 cd "$(dirname "$0")/.."
 
-lein do javac, test, test-cljs
+yarn shadow-cljs release bench
+node target/bench.js $@
