@@ -7,6 +7,10 @@
    {nrepl/nrepl {:mvn/version "1.0.0"}}
    :extra-paths ["test-clojure" "dev"]
    :jvm-opts    ["-ea"]}
+  
+  :cljs
+  {:extra-deps
+   {org.clojure/clojurescript {:mvn/version "1.11.60"}}}
 
   :build
   {:extra-deps {io.github.clojure/tools.build {:git/tag "v0.8.5" :git/sha "9c738da" #_#_:exclusions [org.slf4j/slf4j-nop]}}
