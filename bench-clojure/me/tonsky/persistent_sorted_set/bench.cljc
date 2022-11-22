@@ -51,11 +51,6 @@
 (defn contains?-10K []
   (doseq [x ints-10K]
     (contains? set-10K x)))
-
-(defn contains-fn-10K []
-  (doseq [x ints-10K]
-    (set-10K x)))
-
 (defn iterate-300K []
   (let [*res (volatile! 0)]
     (doseq [x set-300K]
@@ -85,7 +80,6 @@
   {"conj-10K"        conj-10K
    "disj-10K"        disj-10K
    "contains?-10K"   contains?-10K
-   "contains-fn-10K" contains-fn-10K
    "iterate-300K"    iterate-300K
    #?@(:clj 
         ["conj-transient-10K" conj-transient-10K

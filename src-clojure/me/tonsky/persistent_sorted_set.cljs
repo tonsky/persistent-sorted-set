@@ -42,46 +42,34 @@
 (def ^:const min-len 16)
 (def ^:const max-len 32)
 (def ^:private ^:const avg-len (arrays/half (+ max-len min-len)))
-(def ^:private ^:const level-shift (->> (range 31 -1 -1)
-                                     (filter #(bit-test max-len %))
-                                     first
-                                     inc))
-(def ^:private ^:const path-mask (dec (bit-shift-left 1 level-shift)))
-; (def ^:private ^:const max-level 8)
-(def ^:private ^:const empty-path 0 #_(js/Uint8Array. max-level))
+
+(defn empty-path [len]
+  (js/Int8Array. len))
 
 (defn- path-get [path level]
-  (bit-and path-mask
-    (unsigned-bit-shift-right path level)))
-  ; (aget path (quot level level-shift)))
+  (aget path level))
 
 (defn- path-set [path level idx]
-  (-> path
-    (bit-and (bit-not (bit-shift-left path-mask level)))
-    (bit-or (bit-shift-left idx level))))
-  ; (let [path' (js/Uint8Array. path)]
-  ;   (aset path' (quot level level-shift) idx)
-  ;   path'))
+  (let [path' (js/Int8Array. path)]
+    (aset path' level idx)
+    path'))
 
 (defn- path-inc [path]
-  (inc path))
-  ; (path-set path 0 (inc (path-get path 0))))
+  (path-set path 0 (inc (path-get path 0))))
 
 (defn- path-dec [path]
-  (dec path))
-  ; (path-set path 0 (inc (path-get path 0))))
+  (path-set path 0 (dec (path-get path 0))))
 
 (defn- path-cmp [path1 path2]
-  (- path1 path2))
-  ; (loop [level (dec max-level)]
-  ;   (if (< level 0)
-  ;     0
-  ;     (let [i1 (path-get path1 level)
-  ;           i2 (path-get path2 level)]
-  ;       (cond
-  ;         (< i1 i2) -1
-  ;         (> i1 i2) 1
-  ;         :else     (recur (dec level)))))))
+  (loop [level (dec (arrays/alength path1))]
+    (if (< level 0)
+      0
+      (let [i1 (aget path1 level)
+            i2 (aget path2 level)]
+        (cond
+          (< i1 i2) -1
+          (> i1 i2) 1
+          :else     (recur (dec level)))))))
 
 (defn- path-lt [path1 path2]
   (< (path-cmp path1 path2) 0))
@@ -91,6 +79,9 @@
 
 (defn- path-eq [path1 path2]
   (== 0 (path-cmp path1 path2)))
+
+(defn- path-near [path1 path2]
+  (path-eq (path-set path1 0 0) (path-set path2 0 0)))
 
 (defn- binary-search-l [cmp arr r k]
   (loop [l 0
@@ -423,7 +414,8 @@
       start))
            
   IReversible
-  (-rseq [this] (rseq (btset-iter this)))
+  (-rseq [this]
+    (rseq (btset-iter this)))
 
   ; ISorted
   ; (-sorted-seq [this ascending?])
@@ -456,9 +448,9 @@
   (loop [level (.-shift set)
          node  (.-root set)]
     (if (pos? level)
-      (recur (- level level-shift)
-             (arrays/aget (.-pointers node)
-                   (path-get path level)))
+      (recur
+        (dec level)
+        (arrays/aget (.-pointers node) (path-get path level)))
       (.-keys node))))
 
 (defn- alter-btset [set root shift cnt]
@@ -469,15 +461,14 @@
 
 (defn- -next-path [node path level]
   (let [idx (path-get path level)]
-    ; (println "-next-path" path level idx)
     (if (pos? level)
       ;; inner node
-      (let [sub-path (-next-path (arrays/aget (.-pointers node) idx) path (- level level-shift))]
+      (let [sub-path (-next-path (arrays/aget (.-pointers node) idx) path (dec level))]
         (if (nil? sub-path)
           ;; nested node overflow
           (if (< (inc idx) (arrays/alength (.-pointers node)))
             ;; advance current node idx, reset subsequent indexes
-            (path-set empty-path level (inc idx))
+            (path-set (empty-path (arrays/alength path)) level (inc idx))
             ;; current node overflow
             nil)
           ;; keep current idx
@@ -485,22 +476,22 @@
       ;; leaf
       (if (< (inc idx) (arrays/alength (.-keys node)))
         ;; advance leaf idx
-        (path-set empty-path 0 (inc idx))
+        (path-set (empty-path (arrays/alength path)) 0 (inc idx))
         ;; leaf overflow
         nil))))
 
 (defn- -rpath
   "Returns rightmost path possible starting from node and going deeper"
-  [node level]
+  [node path level]
   (loop [node  node
-         path  empty-path
+         path  path
          level level]
     (if (pos? level)
       ;; inner node
       (recur
         (arrays/alast (.-pointers node))
         (path-set path level (dec (arrays/alength (.-pointers node))))
-        (- level level-shift))
+        (dec level))
       ;; leaf
       (path-set path 0 (dec (arrays/alength (.-keys node)))))))
 
@@ -508,24 +499,24 @@
   "Returns path representing next item after `path` in natural traversal order.
    Will overflow at leaf if at the end of the tree"
   [set path]
-  (if (path-eq (path-dec empty-path) path)
-    empty-path
+  (if (path-eq (path-dec (empty-path (inc (.-shift set)))) path)
+    (empty-path (inc (.-shift set)))
     (or
       (-next-path (.-root set) path (.-shift set))
-      (path-inc (-rpath (.-root set) (.-shift set))))))
+      (path-inc (-rpath (.-root set) (empty-path (inc (.-shift set))) (.-shift set))))))
 
 (defn- -prev-path [node path level]
   (let [idx (path-get path level)]
     (if (pos? level)
       ;; inner node
-      (let [sub-level (- level level-shift)
+      (let [sub-level (dec level)
             sub-path  (-prev-path (arrays/aget (.-pointers node) idx) path sub-level)]
         (if (nil? sub-path)
           ;; nested node overflow
           (if (>= (dec idx) 0)
             ;; advance current node idx, reset subsequent indexes
             (let [idx      (dec idx)
-                  sub-path (-rpath (arrays/aget (.-pointers node) idx) sub-level)]
+                  sub-path (-rpath (arrays/aget (.-pointers node) idx) path sub-level)]
               (path-set sub-path level idx))
             ;; current node overflow
             nil)
@@ -534,7 +525,7 @@
       ;; leaf
       (if (>= (dec idx) 0)
         ;; advance leaf idx
-        (path-set empty-path 0 (dec idx))
+        (path-set (empty-path (arrays/alength path)) 0 (dec idx))
         ;; leaf overflow
         nil))))
 
@@ -544,7 +535,7 @@
   [set path]
   (or
     (-prev-path (.-root set) path (.-shift set))
-    (path-dec empty-path)))
+    (path-dec (empty-path (inc (.-shift set))))))
 
 (declare iter riter)
 
@@ -552,8 +543,8 @@
   "Iterator that represents the whole set"
   [set]
   (when (pos? (node-len (.-root set)))
-    (let [left  empty-path
-          right (next-path set (-rpath (.-root set) (.-shift set)))]
+    (let [left  (empty-path (inc (.-shift set)))
+          right (next-path set (-rpath (.-root set) (empty-path (inc (.-shift set))) (.-shift set)))]
       (iter set left right))))
 
 ;; replace with cljs.core/ArrayChunk after https://dev.clojure.org/jira/browse/CLJS-2470
@@ -635,7 +626,7 @@
 
   IChunkedSeq
   (-chunked-first [this]
-    (let [end-idx (if (path-eq (path-set left 0 0) (path-set right 0 0))
+    (let [end-idx (if (path-near left right)
                     ;; right is in the same node
                     (path-get right 0)
                     ;; right is in a different node
@@ -792,12 +783,12 @@
     (if (pos? level)
       ;; inner node
       (if (== idx-l idx-r)
-        (-distance (arrays/aget (.-pointers node) idx-l) left right (- level level-shift))
+        (-distance (arrays/aget (.-pointers node) idx-l) left right (dec level))
         (loop [level level
                res   (- idx-r idx-l)]
           (if (== 0 level)
             res
-            (recur (- level level-shift) (* res avg-len)))))
+            (recur (dec level) (* res avg-len)))))
       (- idx-r idx-l))))
 
 (defn- distance [set path-l path-r]
@@ -825,23 +816,23 @@
    or -1 if all elements in a set < key"
   [set key comparator]
   (if (nil? key)
-    empty-path
+    (empty-path (inc (.-shift set)))
     (loop [node  (.-root set)
-           path  empty-path
+           path  (empty-path (inc (.-shift set)))
            level (.-shift set)]
       (let [keys-l (node-len node)]
         (if (== 0 level)
           (let [keys (.-keys node)
                 idx  (binary-search-l comparator keys (dec keys-l) key)]
             (if (== keys-l idx)
-              -1
+              nil
               (path-set path 0 idx)))
           (let [keys (.-keys node)
                 idx  (binary-search-l comparator keys (- keys-l 2) key)]
             (recur
               (arrays/aget (.-pointers node) idx)
               (path-set path level idx)
-              (- level level-shift))))))))
+              (dec level))))))))
 
 (defn- -rseek*
   "Returns path to the first element that is > key.
@@ -849,9 +840,9 @@
    It’s a virtual path that is bigger than any path in a tree"
   [set key comparator]
   (if (nil? key)
-    (path-inc (-rpath (.-root set) (.-shift set)))
+    (path-inc (-rpath (.-root set) (empty-path (inc (.-shift set))) (.-shift set)))
     (loop [node  (.-root set)
-           path  empty-path
+           path  (empty-path (inc (.-shift set)))
            level (.-shift set)]
       (let [keys-l (node-len node)]
         (if (== 0 level)
@@ -863,13 +854,13 @@
             (recur
               (arrays/aget (.-pointers node) idx)
               (path-set path level idx)
-              (- level level-shift))))))))
+              (dec level))))))))
 
 (defn- -slice [set key-from key-to comparator]
   (let [path (-seek* set key-from comparator)]
-    (when-not (neg? path)
+    (when (some? path)
       (let [till-path (-rseek* set key-to comparator)]
-        (when (> till-path path)
+        (when (path-lt path till-path)
           (Iter. set path till-path (keys-for set path) (path-get path 0)))))))
 
 
@@ -960,7 +951,7 @@
       :else
         (alter-btset set
           (Node. (arrays/amap node-lim-key roots) roots)
-          (+ (.-shift set) level-shift)
+          (inc (.-shift set))
           (inc (.-cnt set))))))
 
 
@@ -977,7 +968,7 @@
           ;; root has one child, make him new root
           (alter-btset set
             (arrays/aget (.-pointers new-root) 0)
-            (- (.-shift set) level-shift)
+            (dec (.-shift set))
             (dec (.-cnt set)))
           
           ;; keeping root level
@@ -1030,10 +1021,11 @@
       (case (count current-level)
         0 (BTSet. (Leaf. (arrays/array)) 0 0 cmp nil uninitialized-hash)
         1 (BTSet. (first current-level) shift (arrays/alength arr) cmp nil uninitialized-hash)
-        (recur (->> current-level
-                    (arr-partition-approx min-len max-len)
-                    (arr-map-inplace #(Node. (arrays/amap node-lim-key %) %)))
-               (+ shift level-shift))))))
+        (recur
+          (->> current-level
+            (arr-partition-approx min-len max-len)
+            (arr-map-inplace #(Node. (arrays/amap node-lim-key %) %)))
+          (inc shift))))))
 
 
 (defn from-sequential
