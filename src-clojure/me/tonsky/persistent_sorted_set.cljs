@@ -42,55 +42,57 @@
 (def ^:const max-len 32)
 (def ^:private ^:const avg-len (arrays/half (+ max-len min-len)))
 
-(defn empty-path [^number len]
-  (js/Int8Array. len))
+(defn empty-path ^array [^number len]
+  (let [a (js/Array. len)]
+    (.fill a 0)
+    a))
 
-(defn- path-clone [path]
-  (js/Int8Array. path))
+(defn- path-clone ^array [^array path]
+  (arrays/aclone path))
 
-(defn- path-get ^number [path ^number level]
+(defn- path-get ^number [^array path ^number level]
   (arrays/aget path level))
 
-(defn- path-mutate [path ^number level ^number idx]
+(defn- path-mutate ^array [^array path ^number level ^number idx]
   (arrays/aset path level idx)
   path)
 
-(defn- path-set [path ^number level ^number idx]
+(defn- path-set ^array [^array path ^number level ^number idx]
   (path-mutate (path-clone path) level idx))
 
-(defn- path-inc [path]
+(defn- path-inc ^array [^array path]
   (path-set path 0 (inc (path-get path 0))))
 
-(defn- path-dec [path]
+(defn- path-dec ^array [^array path]
   (path-set path 0 (dec (path-get path 0))))
 
-(defn- path-len ^number [path]
+(defn- path-len ^number [^array path]
   (arrays/alength path))
 
 (defn- path-cmp
-  ([path1 path2]
+  (^number [^array path1 ^array path2]
    (path-cmp path1 path2 0))
-  ([path1 path2 ^number end-level]
+  (^number [^array path1 ^array path2 ^number end-level]
    (loop [level (dec (path-len path1))]
      (if (< level end-level)
        0
-       (let [i1 (aget path1 level)
-             i2 (aget path2 level)]
+       (let [i1 (arrays/aget path1 level)
+             i2 (arrays/aget path2 level)]
          (cond
            (< i1 i2) -1
            (> i1 i2) 1
            :else     (recur (dec level))))))))
 
-(defn- path-lt ^boolean [path1 path2]
+(defn- path-lt ^boolean [^array path1 ^array path2]
   (< (path-cmp path1 path2) 0))
 
-(defn- path-lte ^boolean [path1 path2]
+(defn- path-lte ^boolean [^array path1 ^array path2]
   (<= (path-cmp path1 path2) 0))
 
-(defn- path-eq ^boolean [path1 path2]
+(defn- path-eq ^boolean [^array path1 ^array path2]
   (== 0 (path-cmp path1 path2)))
 
-(defn- path-same-leaf ^boolean [path1 path2]
+(defn- path-same-leaf ^boolean [^array path1 ^array path2]
   (== 0 (path-cmp path1 path2 1)))
 
 (defn- binary-search-l [cmp arr r k]
