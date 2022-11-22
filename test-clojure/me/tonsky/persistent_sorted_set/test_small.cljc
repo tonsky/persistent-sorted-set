@@ -29,8 +29,8 @@
   (is (= (range 19 9 -1)
         (set/rslice (into (set/sorted-set) (range 0 40)) 19 10)))
   
-  ; (is (= (range 10 20)
-  ;       (set/slice (into (set/sorted-set) (range 0 40)) 10 19)))
+  (is (= (range 10 20)
+        (set/slice (into (set/sorted-set) (range 0 40)) 10 19)))
   
   
   #_(loop [xs (range 29 -1 -1)

@@ -19,17 +19,17 @@
 ; All arrays are 16..32 elements, inclusive
 
 ; BTSet:    root       :: Node or Leaf
-;           shift      :: path bit-shift of root level, == (depth - 1) * level-shift
+;           shift      :: depth - 1
 ;           cnt        :: size of a set, integer, rolling
 ;           comparator :: comparator used for ordering
 ;           meta       :: clojure meta map
 ;           _hash      :: hash code, same as for clojure collections, on-demand, cached
 
-; Path: conceptually a vector of indexes from root to leaf value, but encoded in a single int.
-;       E.g. we have path [7 53 11] representing root.pointers[7].pointers[3].keys[11].
-;       In our case level-shift is 8, meaning each index will take 8 bits:
-;       (7 << 16) | (53 << 8) | 11 = 472331
-;       0000 0111   0011 0101   0000 1011
+; Path: conceptually a vector of indexes from root to leaf value, but encoded in a single number.
+;       E.g. we have path [7 30 11] representing root.pointers[7].pointers[30].keys[11].
+;       In our case level-shift is 5, meaning each index will take 5 bits:
+;       (7 << 16) | (30 << 5) | (11 << 0) = 8139
+;         00111       11110       01011
 
 ; Iter:     set       :: Set this iterator belongs to
 ;           left      :: Current path
@@ -38,62 +38,70 @@
 ;           idx       :: Cached idx in keys array
 ; Keys and idx are cached for fast iteration inside a leaf"
 
-(def ^:const min-len 16)
-(def ^:const max-len 32)
+(def ^:const min-len 16)                ;; power of 2
+(def ^:const max-len 32)                ;; min-len * 2
 (def ^:private ^:const avg-len (arrays/half (+ max-len min-len)))
+(def ^:const bits-per-level 5)          ;; log2(max-len)
+(def ^:const max-safe-path 0x100000000) ;; 2^32, js limitation for bit ops
+(def ^:const max-safe-level 6)          ;; bits-per-level * 6 = 30 bit < 32 bit
+(def ^:const bit-mask 0x1F)             ;; 0b11111 = 5 bit
 
-(defn empty-path ^array [^number len]
-  (let [a (js/Array. len)]
-    (.fill a 0)
-    a))
+(def factors
+  (arrays/into-array (map #(js/Math.pow 2 %) (range 0 52 bits-per-level))))
 
-(defn- path-clone ^array [^array path]
-  (arrays/aclone path))
+(def ^:const empty-path 0)
 
-(defn- path-get ^number [^array path ^number level]
-  (arrays/aget path level))
+(defn- path-get ^number [^number path ^number level]
+  (if (< level max-safe-level)
+    (-> path
+      (unsigned-bit-shift-right (* level bits-per-level))
+      (bit-and bit-mask))
+    (-> path
+      (/ (arrays/aget factors level))
+      (js/Math.floor)
+      (bit-and bit-mask))))
 
-(defn- path-mutate ^array [^array path ^number level ^number idx]
-  (arrays/aset path level idx)
-  path)
+(defn- path-set ^number [^number path ^number level ^number idx]
+  (let [smol? (and (< path max-safe-path) (< level max-safe-level))
+        old   (path-get path level)
+        minus (if smol?
+                (bit-shift-left old (* level bits-per-level))
+                (* old (arrays/aget factors level)))
+        plus  (if smol?
+                (bit-shift-left idx (* level bits-per-level))
+                (* idx (arrays/aget factors level)))]
+    (-> path
+      (- minus)
+      (+ plus))))
 
-(defn- path-set ^array [^array path ^number level ^number idx]
-  (path-mutate (path-clone path) level idx))
+(defn- path-inc ^number [^number path]
+  (inc path))
 
-(defn- path-inc ^array [^array path]
-  (path-set path 0 (inc (path-get path 0))))
+(defn- path-dec ^number [^number path]
+  (dec path))
 
-(defn- path-dec ^array [^array path]
-  (path-set path 0 (dec (path-get path 0))))
+(defn- path-cmp ^number [^number path1 ^number path2]
+  (- path1 path2))
 
-(defn- path-len ^number [^array path]
-  (arrays/alength path))
+(defn- path-lt ^boolean [^number path1 ^number path2]
+  (< path1 path2))
 
-(defn- path-cmp
-  (^number [^array path1 ^array path2]
-   (path-cmp path1 path2 0))
-  (^number [^array path1 ^array path2 ^number end-level]
-   (loop [level (dec (path-len path1))]
-     (if (< level end-level)
-       0
-       (let [i1 (arrays/aget path1 level)
-             i2 (arrays/aget path2 level)]
-         (cond
-           (< i1 i2) -1
-           (> i1 i2) 1
-           :else     (recur (dec level))))))))
+(defn- path-lte ^boolean [^number path1 ^number path2]
+  (<= path1 path2))
 
-(defn- path-lt ^boolean [^array path1 ^array path2]
-  (< (path-cmp path1 path2) 0))
+(defn- path-eq ^boolean [^number path1 ^number path2]
+  (== path1 path2))
 
-(defn- path-lte ^boolean [^array path1 ^array path2]
-  (<= (path-cmp path1 path2) 0))
-
-(defn- path-eq ^boolean [^array path1 ^array path2]
-  (== 0 (path-cmp path1 path2)))
-
-(defn- path-same-leaf ^boolean [^array path1 ^array path2]
-  (== 0 (path-cmp path1 path2 1)))
+(defn- path-same-leaf ^boolean [^number path1 ^number path2]
+  (if (and
+        (< path1 max-safe-path)
+        (< path2 max-safe-path))
+    (==
+      (unsigned-bit-shift-right path1 bits-per-level)
+      (unsigned-bit-shift-right path2 bits-per-level))
+    (== 
+      (Math/floor (/ path1 max-len))
+      (Math/floor (/ path2 max-len)))))
 
 (defn- binary-search-l [cmp arr r k]
   (loop [l 0
@@ -480,15 +488,15 @@
           ;; nested node overflow
           (if (< (inc idx) (arrays/alength (.-pointers node)))
             ;; advance current node idx, reset subsequent indexes
-            (path-mutate (empty-path (path-len path)) level (inc idx))
+            (path-set empty-path level (inc idx))
             ;; current node overflow
             nil)
           ;; keep current idx
-          (path-mutate sub-path level idx)))
+          (path-set sub-path level idx)))
       ;; leaf
       (if (< (inc idx) (arrays/alength (.-keys node)))
         ;; advance leaf idx
-        (path-mutate (empty-path (path-len path)) 0 (inc idx))
+        (path-set empty-path 0 (inc idx))
         ;; leaf overflow
         nil))))
 
@@ -502,20 +510,20 @@
       ;; inner node
       (recur
         (arrays/alast (.-pointers node))
-        (path-mutate path level (dec (arrays/alength (.-pointers node))))
+        (path-set path level (dec (arrays/alength (.-pointers node))))
         (dec level))
       ;; leaf
-      (path-mutate path 0 (dec (arrays/alength (.-keys node)))))))
+      (path-set path 0 (dec (arrays/alength (.-keys node)))))))
 
 (defn- next-path
   "Returns path representing next item after `path` in natural traversal order.
    Will overflow at leaf if at the end of the tree"
   [set path]
-  (if (neg? (path-get path 0))
-    (empty-path (inc (.-shift set)))
+  (if (neg? path)
+    empty-path
     (or
       (-next-path (.-root set) path (.-shift set))
-      (path-inc (-rpath (.-root set) (empty-path (inc (.-shift set))) (.-shift set))))))
+      (path-inc (-rpath (.-root set) empty-path (.-shift set))))))
 
 (defn- -prev-path [node path level]
   (let [idx (path-get path level)]
@@ -528,16 +536,16 @@
           (if (>= (dec idx) 0)
             ;; advance current node idx, reset subsequent indexes
             (let [idx      (dec idx)
-                  sub-path (-rpath (arrays/aget (.-pointers node) idx) (path-clone path) sub-level)]
-              (path-mutate sub-path level idx))
+                  sub-path (-rpath (arrays/aget (.-pointers node) idx) path sub-level)]
+              (path-set sub-path level idx))
             ;; current node overflow
             nil)
           ;; keep current idx
-          (path-mutate sub-path level idx)))
+          (path-set sub-path level idx)))
       ;; leaf
       (if (>= (dec idx) 0)
         ;; advance leaf idx
-        (path-mutate (empty-path (path-len path)) 0 (dec idx))
+        (path-set empty-path 0 (dec idx))
         ;; leaf overflow
         nil))))
 
@@ -547,7 +555,7 @@
   [set path]
   (or
     (-prev-path (.-root set) path (.-shift set))
-    (path-dec (empty-path (inc (.-shift set))))))
+    (path-dec empty-path)))
 
 (declare iter riter)
 
@@ -555,8 +563,8 @@
   "Iterator that represents the whole set"
   [set]
   (when (pos? (node-len (.-root set)))
-    (let [left  (empty-path (inc (.-shift set)))
-          right (next-path set (-rpath (.-root set) (empty-path (inc (.-shift set))) (.-shift set)))]
+    (let [left  empty-path
+          right (next-path set (-rpath (.-root set) empty-path (.-shift set)))]
       (iter set left right))))
 
 ;; replace with cljs.core/ArrayChunk after https://dev.clojure.org/jira/browse/CLJS-2470
@@ -828,9 +836,9 @@
    or -1 if all elements in a set < key"
   [set key comparator]
   (if (nil? key)
-    (empty-path (inc (.-shift set)))
+    empty-path
     (loop [node  (.-root set)
-           path  (empty-path (inc (.-shift set)))
+           path  empty-path
            level (.-shift set)]
       (let [keys-l (node-len node)]
         (if (== 0 level)
@@ -852,9 +860,9 @@
    It’s a virtual path that is bigger than any path in a tree"
   [set key comparator]
   (if (nil? key)
-    (path-inc (-rpath (.-root set) (empty-path (inc (.-shift set))) (.-shift set)))
+    (path-inc (-rpath (.-root set) empty-path (.-shift set)))
     (loop [node  (.-root set)
-           path  (empty-path (inc (.-shift set)))
+           path  empty-path
            level (.-shift set)]
       (let [keys-l (node-len node)]
         (if (== 0 level)
