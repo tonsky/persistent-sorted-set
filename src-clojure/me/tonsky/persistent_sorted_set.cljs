@@ -38,21 +38,25 @@
 ;           idx       :: Cached idx in keys array
 ; Keys and idx are cached for fast iteration inside a leaf"
 
-
 (def ^:const min-len 16)
 (def ^:const max-len 32)
 (def ^:private ^:const avg-len (arrays/half (+ max-len min-len)))
 
-(defn empty-path [len]
+(defn empty-path [^number len]
   (js/Int8Array. len))
 
-(defn- path-get [path level]
-  (aget path level))
+(defn- path-clone [path]
+  (js/Int8Array. path))
 
-(defn- path-set [path level idx]
-  (let [path' (js/Int8Array. path)]
-    (aset path' level idx)
-    path'))
+(defn- path-get ^number [path ^number level]
+  (arrays/aget path level))
+
+(defn- path-mutate [path ^number level ^number idx]
+  (arrays/aset path level idx)
+  path)
+
+(defn- path-set [path ^number level ^number idx]
+  (path-mutate (path-clone path) level idx))
 
 (defn- path-inc [path]
   (path-set path 0 (inc (path-get path 0))))
@@ -60,28 +64,34 @@
 (defn- path-dec [path]
   (path-set path 0 (dec (path-get path 0))))
 
-(defn- path-cmp [path1 path2]
-  (loop [level (dec (arrays/alength path1))]
-    (if (< level 0)
-      0
-      (let [i1 (aget path1 level)
-            i2 (aget path2 level)]
-        (cond
-          (< i1 i2) -1
-          (> i1 i2) 1
-          :else     (recur (dec level)))))))
+(defn- path-len ^number [path]
+  (arrays/alength path))
 
-(defn- path-lt [path1 path2]
+(defn- path-cmp
+  ([path1 path2]
+   (path-cmp path1 path2 0))
+  ([path1 path2 ^number end-level]
+   (loop [level (dec (path-len path1))]
+     (if (< level end-level)
+       0
+       (let [i1 (aget path1 level)
+             i2 (aget path2 level)]
+         (cond
+           (< i1 i2) -1
+           (> i1 i2) 1
+           :else     (recur (dec level))))))))
+
+(defn- path-lt ^boolean [path1 path2]
   (< (path-cmp path1 path2) 0))
 
-(defn- path-lte [path1 path2]
+(defn- path-lte ^boolean [path1 path2]
   (<= (path-cmp path1 path2) 0))
 
-(defn- path-eq [path1 path2]
+(defn- path-eq ^boolean [path1 path2]
   (== 0 (path-cmp path1 path2)))
 
-(defn- path-near [path1 path2]
-  (path-eq (path-set path1 0 0) (path-set path2 0 0)))
+(defn- path-same-leaf ^boolean [path1 path2]
+  (== 0 (path-cmp path1 path2 1)))
 
 (defn- binary-search-l [cmp arr r k]
   (loop [l 0
@@ -468,15 +478,15 @@
           ;; nested node overflow
           (if (< (inc idx) (arrays/alength (.-pointers node)))
             ;; advance current node idx, reset subsequent indexes
-            (path-set (empty-path (arrays/alength path)) level (inc idx))
+            (path-mutate (empty-path (path-len path)) level (inc idx))
             ;; current node overflow
             nil)
           ;; keep current idx
-          (path-set sub-path level idx)))
+          (path-mutate sub-path level idx)))
       ;; leaf
       (if (< (inc idx) (arrays/alength (.-keys node)))
         ;; advance leaf idx
-        (path-set (empty-path (arrays/alength path)) 0 (inc idx))
+        (path-mutate (empty-path (path-len path)) 0 (inc idx))
         ;; leaf overflow
         nil))))
 
@@ -490,16 +500,16 @@
       ;; inner node
       (recur
         (arrays/alast (.-pointers node))
-        (path-set path level (dec (arrays/alength (.-pointers node))))
+        (path-mutate path level (dec (arrays/alength (.-pointers node))))
         (dec level))
       ;; leaf
-      (path-set path 0 (dec (arrays/alength (.-keys node)))))))
+      (path-mutate path 0 (dec (arrays/alength (.-keys node)))))))
 
 (defn- next-path
   "Returns path representing next item after `path` in natural traversal order.
    Will overflow at leaf if at the end of the tree"
   [set path]
-  (if (path-eq (path-dec (empty-path (inc (.-shift set)))) path)
+  (if (neg? (path-get path 0))
     (empty-path (inc (.-shift set)))
     (or
       (-next-path (.-root set) path (.-shift set))
@@ -516,16 +526,16 @@
           (if (>= (dec idx) 0)
             ;; advance current node idx, reset subsequent indexes
             (let [idx      (dec idx)
-                  sub-path (-rpath (arrays/aget (.-pointers node) idx) path sub-level)]
-              (path-set sub-path level idx))
+                  sub-path (-rpath (arrays/aget (.-pointers node) idx) (path-clone path) sub-level)]
+              (path-mutate sub-path level idx))
             ;; current node overflow
             nil)
           ;; keep current idx
-          (path-set sub-path level idx)))
+          (path-mutate sub-path level idx)))
       ;; leaf
       (if (>= (dec idx) 0)
         ;; advance leaf idx
-        (path-set (empty-path (arrays/alength path)) 0 (dec idx))
+        (path-mutate (empty-path (path-len path)) 0 (dec idx))
         ;; leaf overflow
         nil))))
 
@@ -626,7 +636,7 @@
 
   IChunkedSeq
   (-chunked-first [this]
-    (let [end-idx (if (path-near left right)
+    (let [end-idx (if (path-same-leaf left right)
                     ;; right is in the same node
                     (path-get right 0)
                     ;; right is in a different node

@@ -51,11 +51,22 @@
 (defn contains?-10K []
   (doseq [x ints-10K]
     (contains? set-10K x)))
-(defn iterate-300K []
+
+(defn doseq-300K []
   (let [*res (volatile! 0)]
     (doseq [x set-300K]
       (vswap! *res + x))
     @*res))
+
+(defn next-300K []
+  (loop [xs  set-300K
+         res 0]
+    (if-some [x (first xs)]
+      (recur (next xs) (+ res x))
+      res)))
+
+(defn reduce-300K []
+  (reduce + 0 set-300K))
 
 #?(:clj
     (defn into-50K []
@@ -68,10 +79,6 @@
         (test-storage/storage))))
 
 #?(:clj
-    (defn reduce-300K []
-      (reduce + 0 set-300K)))
-
-#?(:clj
     (defn reduce-300K-lazy []
       (reset! (:*memory storage-300K) {})
       (reduce + 0 (set/restore address-300K storage-300K))))
@@ -80,13 +87,14 @@
   {"conj-10K"        conj-10K
    "disj-10K"        disj-10K
    "contains?-10K"   contains?-10K
-   "iterate-300K"    iterate-300K
+   "doseq-300K"      doseq-300K
+   "next-300K"       next-300K
+   "reduce-300K"     reduce-300K
    #?@(:clj 
         ["conj-transient-10K" conj-transient-10K
          "disj-transient-10K" disj-transient-10K
          "into-50K"           into-50K
          "store-50K"          store-50K
-         "reduce-300K"        reduce-300K
          "reduce-300K-lazy"   reduce-300K-lazy])})
 
 (defn ^:export -main [& args]
