@@ -9,8 +9,8 @@
 (def ^:dynamic *samples*   5)
 (def ^:dynamic *batch*     10)
 
-#?(:cljs (defn ^number now [] (js/performance.now))
-    :clj  (defn now ^double [] (/ (System/nanoTime) 1000000.0)))
+#?(:cljs (defn ^number now [] (system-time))
+   :clj  (defn now ^double [] (/ (System/nanoTime) 1000000.0)))
 
 #?(:clj
     (defmacro dotime

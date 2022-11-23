@@ -1,4 +1,4 @@
-(ns me.tonsky.persistent-sorted-set.test-seek
+(ns me.tonsky.persistent-sorted-set.test.seek
   (:require
     [me.tonsky.persistent-sorted-set :as set]
     #?(:clj [me.tonsky.persistent-sorted-set.test-storage :as test-storage])
@@ -61,7 +61,7 @@
           expected-seq  (filter #(<= seek-to %) xs-sorted)
           expected-rseq  (reverse (filter #(<= % seek-to) xs-sorted))
           set       (into (set/sorted-set) xs)]
-      (testing (str "seek to" seek-to)
+      (testing (str "seek to " seek-to)
         (is (= expected-seq (seq (set/seek (seq set) seek-to))))
         (is (= expected-rseq (seq (set/seek (rseq set) seek-to)))))))
   (println "[ DONE ] stresstest-seek"))

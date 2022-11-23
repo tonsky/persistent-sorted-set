@@ -1,9 +1,9 @@
-(ns me.tonsky.persistent-sorted-set.test
+(ns me.tonsky.persistent-sorted-set.test.core
   (:require
     [me.tonsky.persistent-sorted-set :as set]
     #?(:clj [me.tonsky.persistent-sorted-set.test-storage :as test-storage])
     #?(:cljs [cljs.test    :as t :refer-macros [is are deftest testing]]
-        :clj  [clojure.test :as t :refer        [is are deftest testing]]))
+       :clj  [clojure.test :as t :refer        [is are deftest testing]]))
   #?(:clj
       (:import [clojure.lang IReduce])))
 

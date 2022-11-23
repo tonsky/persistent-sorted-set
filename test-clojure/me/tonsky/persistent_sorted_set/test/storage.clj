@@ -1,4 +1,4 @@
-(ns me.tonsky.persistent-sorted-set.test-storage
+(ns me.tonsky.persistent-sorted-set.test.storage
   (:require
     [clojure.edn :as edn]
     [clojure.string :as str]
