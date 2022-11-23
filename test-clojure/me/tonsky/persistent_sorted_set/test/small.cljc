@@ -1,11 +1,7 @@
 (ns me.tonsky.persistent-sorted-set.test.small
   (:require
     [me.tonsky.persistent-sorted-set :as set]
-    #?(:clj [me.tonsky.persistent-sorted-set.test-storage :as test-storage])
-    #?(:cljs [cljs.test    :as t :refer-macros [is are deftest testing]]
-        :clj  [clojure.test :as t :refer        [is are deftest testing]]))
-  #?(:clj
-      (:import [clojure.lang IReduce])))
+    [clojure.test :as t :refer [is are deftest testing]]))
 
 (deftest test-small
   (is (= (range 10 20)

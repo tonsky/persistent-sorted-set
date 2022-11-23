@@ -4,7 +4,7 @@
     #?(:clj [criterium.core :as criterium])
     [me.tonsky.persistent-sorted-set :as set]
     [me.tonsky.persistent-sorted-set.bench.core :as bench.core]
-    #?(:clj [me.tonsky.persistent-sorted-set.test-storage :as test-storage])))
+    #?(:clj [me.tonsky.persistent-sorted-set.test.storage :as storage])))
 
 #?(:clj (set/set-branching-factor! 64))
 
@@ -28,7 +28,7 @@
 
 #?(:clj
     (def storage-300K
-      (test-storage/storage)))
+      (storage/storage)))
 
 #?(:clj
     (def address-300K
@@ -76,7 +76,7 @@
     (defn store-50K []
       (set/store
         (into (set/sorted-set) ints-50K)
-        (test-storage/storage))))
+        (storage/storage))))
 
 #?(:clj
     (defn reduce-300K-lazy []

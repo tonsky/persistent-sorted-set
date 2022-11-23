@@ -1,11 +1,8 @@
 (ns me.tonsky.persistent-sorted-set.test.stress
   (:require
     [me.tonsky.persistent-sorted-set :as set]
-    #?(:clj [me.tonsky.persistent-sorted-set.test-storage :as test-storage])
-    #?(:cljs [cljs.test    :as t :refer-macros [is are deftest testing]]
-        :clj  [clojure.test :as t :refer        [is are deftest testing]]))
-  #?(:clj
-      (:import [clojure.lang IReduce])))
+    #?(:clj [me.tonsky.persistent-sorted-set.test.storage :as storage])
+    [clojure.test :as t :refer [is are deftest testing]]))
 
 (def iters 100)
 
@@ -26,7 +23,7 @@
           xs-rm     (reduce disj (into (sorted-set) xs) rm)]
       (doseq [[method set0] [["conj" (into (set/sorted-set) xs)]
                              ["bulk" (apply set/sorted-set xs)]
-                             #?(:clj ["lazy" (test-storage/roundtrip (into (set/sorted-set) xs))])]
+                             #?(:clj ["lazy" (storage/roundtrip (into (set/sorted-set) xs))])]
               :let [set1 (reduce disj set0 rm)
                     set2 (persistent! (reduce disj (transient set0) rm))
                     set3 (reduce disj set0 full-rm)
@@ -64,7 +61,7 @@
           [from to] (sort [(- 10000 (rand-int 20000)) (+ 10000 (rand-int 20000))])
           expected  (filter #(<= from % to) xs-sorted)]
       (doseq [[method set] [["conj" (into (set/sorted-set) xs)]
-                            #?(:clj ["lazy" (test-storage/roundtrip (into (set/sorted-set) xs))])]
+                            #?(:clj ["lazy" (storage/roundtrip (into (set/sorted-set) xs))])]
               :let [set-range (set/slice set from to)]]
         (testing
           (str
