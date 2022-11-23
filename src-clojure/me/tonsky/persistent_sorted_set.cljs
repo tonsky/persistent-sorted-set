@@ -41,17 +41,17 @@
 (def ^:const max-safe-path
   "js limitation for bit ops"
   (js/Math.pow 2 31))
-  
+
 (def ^:const bits-per-level
   "tunable param"
   5)
-  
+
 (def ^:const max-len
   (js/Math.pow 2 bits-per-level)) ;; 32
 
 (def ^:const min-len
   (/ max-len 2)) ;; 16
-  
+
 (def ^:private ^:const avg-len
   (arrays/half (+ max-len min-len))) ;; 24
 
@@ -501,7 +501,7 @@
 
 ;; iteration
 
-(defn- -next-path [node path level]
+(defn- -next-path [node ^number path ^number level]
   (let [idx (path-get path level)]
     (if (pos? level)
       ;; inner node
@@ -524,7 +524,7 @@
 
 (defn- -rpath
   "Returns rightmost path possible starting from node and going deeper"
-  [node path level]
+  [node ^number path ^number level]
   (loop [node  node
          path  path
          level level]
@@ -540,22 +540,22 @@
 (defn- next-path
   "Returns path representing next item after `path` in natural traversal order.
    Will overflow at leaf if at the end of the tree"
-  [set path]
+  [set ^number path]
   (if (neg? path)
     empty-path
     (or
       (-next-path (.-root set) path (.-shift set))
       (path-inc (-rpath (.-root set) empty-path (.-shift set))))))
 
-(defn- -prev-path [node path level]
+(defn- -prev-path [node ^number path ^number level]
   (let [idx (path-get path level)]
     (cond
       ;; leaf overflow
-      (and (= 0 level) (= 0 idx))
+      (and (== 0 level) (== 0 idx))
       nil
       
       ;; leaf
-      (= 0 level)
+      (== 0 level)
       (path-set empty-path 0 (dec idx))
       
       ;; branch that was overflow before
@@ -570,7 +570,7 @@
           (path-set path' level idx)
           
           ;; nested overflow + this node overflow
-          (= 0 idx)
+          (== 0 idx)
           nil
           
           ;; nested overflow, advance current idx, reset subsequent indexes
@@ -581,7 +581,7 @@
 (defn- prev-path
   "Returns path representing previous item before `path` in natural traversal order.
    Will overflow at leaf if at beginning of tree"
-  [set path]
+  [set ^number path]
   (if (> (path-get path (inc (.-shift set))) 0) ;; overflow
     (-rpath (.-root set) path (.-shift set))
     (or
@@ -734,7 +734,9 @@
       (riter set (prev-path set left) (prev-path set right))))
 
   ISeek
-  (-seek [this key] (-seek this key (.-comparator set)))
+  (-seek [this key]
+    (-seek this key (.-comparator set)))
+  
   (-seek [this key cmp]
     (cond
       (nil? key)
@@ -744,9 +746,8 @@
       this
       
       :else
-      (let [left' (-seek* set key cmp)]
-        (when-not (neg? left')
-          (Iter. set left' right (keys-for set left') (path-get left' 0))))))
+      (when-some [left' (-seek* set key cmp)]
+        (Iter. set left' right (keys-for set left') (path-get left' 0)))))
 
   Object
   (toString [this] (pr-str* this))
@@ -810,7 +811,7 @@
       this
       
       :else
-      (let [right' (path-dec (-rseek* set key cmp))]
+      (let [right' (prev-path set (-rseek* set key cmp))]
         (when (and
                 (nat-int? right')
                 (path-lte left right')
@@ -911,12 +912,10 @@
               (dec level))))))))
 
 (defn- -slice [set key-from key-to comparator]
-  (let [path (-seek* set key-from comparator)]
-    (when (some? path)
-      (let [till-path (-rseek* set key-to comparator)]
-        (when (path-lt path till-path)
-          (Iter. set path till-path (keys-for set path) (path-get path 0)))))))
-
+  (when-some [path (-seek* set key-from comparator)]
+    (let [till-path (-rseek* set key-to comparator)]
+      (when (path-lt path till-path)
+        (Iter. set path till-path (keys-for set path) (path-get path 0))))))
 
 (defn- arr-map-inplace [f arr]
   (let [len (arrays/alength arr)]

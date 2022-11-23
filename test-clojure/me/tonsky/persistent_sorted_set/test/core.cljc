@@ -323,3 +323,40 @@
         (is (thrown-with-msg? Exception #"iterating and mutating" (chunk-first seq)))
         (is (thrown-with-msg? Exception #"iterating and mutating" (chunk-next seq)))
         (is (thrown-with-msg? Exception #"iterating and mutating" (.iterator ^Iterable seq))))))
+
+(deftest seek-for-seq-test
+  (let [size 1000
+        set (apply set/sorted-set (range size))
+        set-seq (seq set)
+        set-rseq (rseq set)]
+    (testing "simple seek for seq testing"
+      (doseq [seek-loc (map #(* 100 %) (range 10))]
+        (is (= seek-loc (first (set/seek set-seq seek-loc)))))
+      (doseq [seek-loc (map #(* 100 %) (range 10))]
+        (is (= seek-loc (first (set/seek set-rseq seek-loc))))))
+
+    (testing "multiple seek testing"
+      (is (= 500 (-> set-seq (set/seek 250) (set/seek 500) first)))
+      (is (= 500 (-> set-rseq (set/seek 750) (set/seek 500) first))))
+
+    (testing "normal seq behaviour after seek"
+      (is (= (range 500 1000) (-> set-seq (set/seek 250) (set/seek 500))))
+      (is (= (range 999 499 -1) (-> set-seq (set/seek 250) (set/seek 500) rseq)))
+      (is (= (range 500 -1 -1) (-> set-rseq (set/seek 750) (set/seek 500))))
+      (is (= (range 0 501) (-> set-rseq (set/seek 750) (set/seek 500) rseq))))
+
+    #?(:clj
+       (testing "nil behaviour"
+         (is (thrown-with-msg? Exception #"seek can't be called with a nil key!" (set/seek set-seq nil)))))
+
+    (testing "slicing together with seek"
+      (is (= (range 5000 7501) (-> (set/slice (apply set/sorted-set (range 10000)) 2500 7500)
+                                   (set/seek 5000))))
+      (is (= (list 7500) (-> (set/slice (apply set/sorted-set (range 10000)) 2500 7500)
+                             (set/seek 5000)
+                             (set/seek 7500))))
+      (is (= (range 5000 2499 -1) (-> (set/rslice (apply set/sorted-set (range 10000)) 7500 2500)
+                                      (set/seek 5000))))
+      (is (= (list 2500) (-> (set/rslice (apply set/sorted-set (range 10000)) 7500 2500)
+                             (set/seek 5000)
+                             (set/seek 2500)))))))

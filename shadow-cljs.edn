@@ -9,5 +9,5 @@
   :test
   {:target           :node-test
    :output-to        "target/test.js"
-   :ns-regexp        "me\\.tonsky\\.persistent-sorted-set\\.test\\.(small|core|stress)$"
+   :ns-regexp        "me\\.tonsky\\.persistent-sorted-set\\.test\\..*$"
    :compiler-options {:infer-externs true}}}}

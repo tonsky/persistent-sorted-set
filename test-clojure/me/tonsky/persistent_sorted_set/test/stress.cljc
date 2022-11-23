@@ -92,7 +92,30 @@
               (set/rslice s (+ 3000 100) -100)
               (-> (set/rslice s (+ 3000 100) -100) rseq reverse)))))))
 
+(deftest stresstest-seek
+  (println "  testing stresstest-seek...")
+  (dotimes [i iters]
+    (let [xs        (repeatedly (inc (rand-int 20000)) #(rand-int 20000))
+          xs-sorted (distinct (sort xs))
+          seek-to   (rand-int 20000)
+          set       (into (set/sorted-set) xs-sorted)]
+      (testing (str "Iter: " i "/" iters ", seek to " seek-to)
+        (is (= (seq (drop-while #(< % seek-to) xs-sorted))
+              (set/seek (seq set) seek-to)))
+        
+        (is (= (seq (drop-while #(< % 19999) xs-sorted))
+              (set/seek (seq set) 19999)))
+        
+        (is (= (seq (reverse (take-while #(<= % seek-to) xs-sorted)))
+              (set/seek (rseq set) seek-to)))
+        
+        (is (= (seq (reverse (take-while #(<= % 1) xs-sorted)))
+              (set/seek (rseq set) 1)))))))
+
 (deftest test-overflow
   (println "  testing test-overflow...")
-  (let [s (into (set/sorted-set) (range 4000000))]
+  (let [len  4000000
+        part (quot len 100)
+        xss  (partition-all part (shuffle (range 0 len)))
+        s    (reduce into (set/sorted-set) xss)]
     (is (= 10 (count (take 10 s))))))
