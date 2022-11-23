@@ -1,3 +1,7 @@
+# 0.2.3
+
+- Support set > 1M in CLJS (< 16^6 = 16M for fast path, up to 32^10 = 10^15 theoretically)
+
 # 0.2.2
 
 - Made Seq class public #11 via @FiV0
