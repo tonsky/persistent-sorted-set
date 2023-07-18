@@ -125,8 +125,8 @@
       (recur (cljs.core/conj res (mod path max-len)) (Math/floor (/ path max-len)))
       (vec res))))
 
-(defn- binary-search-l [cmp arr r k]
-  (loop [l 0
+(defn- binary-search-l [cmp arr l r k]
+  (loop [l (long l)
          r (long r)]
     (if (<= l r)
       (let [m  (arrays/half (+ l r))
@@ -136,8 +136,8 @@
           (recur l (dec m))))
       l)))
 
-(defn- binary-search-r [cmp arr r k]
-  (loop [l 0
+(defn- binary-search-r [cmp arr l r k]
+  (loop [l (long l)
          r (long r)]
     (if (<= l r)
       (let [m  (arrays/half (+ l r))
@@ -149,7 +149,7 @@
 
 (defn- lookup-exact [cmp arr key]
   (let [arr-l (arrays/alength arr)
-        idx   (binary-search-l cmp arr (dec arr-l) key)]
+        idx   (binary-search-l cmp arr 0 (dec arr-l) key)]
     (if (and (< idx arr-l)
              (== 0 (cmp (arrays/aget arr idx) key)))
       idx
@@ -157,7 +157,7 @@
 
 (defn- lookup-range [cmp arr key]
   (let [arr-l (arrays/alength arr)
-        idx   (binary-search-l cmp arr (dec arr-l) key)]
+        idx   (binary-search-l cmp arr 0 (dec arr-l) key)]
     (if (== idx arr-l)
       -1
       idx)))
@@ -311,7 +311,7 @@
         (node-lookup (arrays/aget pointers idx) cmp key))))
   
   (node-conj [_ cmp key]
-    (let [idx   (binary-search-l cmp keys (- (arrays/alength keys) 2) key)
+    (let [idx   (binary-search-l cmp keys 0 (- (arrays/alength keys) 2) key)
           nodes (node-conj (arrays/aget pointers idx) cmp key)]
       (when nodes
         (let [new-keys     (check-n-splice cmp keys     idx (inc idx) (arrays/amap node-lim-key nodes))
@@ -367,7 +367,7 @@
         (arrays/aget keys idx))))
 
   (node-conj [_ cmp key]
-    (let [idx    (binary-search-l cmp keys (dec (arrays/alength keys)) key)
+    (let [idx    (binary-search-l cmp keys 0 (dec (arrays/alength keys)) key)
           keys-l (arrays/alength keys)]
       (cond
         ;; element already here
@@ -746,7 +746,7 @@
       this
       
       :else
-      (when-some [left' (-seek* set key cmp)]
+      (when-some [left' (-seek* set key empty-path nil cmp)]
         (Iter. set left' right (keys-for set left') (path-get left' 0)))))
 
   Object
@@ -811,7 +811,7 @@
       this
       
       :else
-      (let [right' (prev-path set (-rseek* set key cmp))]
+      (let [right' (prev-path set (-rseek* set key empty-path nil cmp))]
         (when (and
                 (nat-int? right')
                 (path-lte left right')
@@ -864,58 +864,77 @@
 
 ;; Slicing
 
+(defn- safe-min [x y]
+  (if x
+    (min x y)
+    y))
+
 (defn- -seek*
-  "Returns path to first element >= key,
-   or -1 if all elements in a set < key"
-  [set key comparator]
+  "Returns path to first element >= key, or -1 if all elements in a set < key"
+  [set key path-left path-right comparator]
   (if (nil? key)
     empty-path
-    (loop [node  (.-root set)
-           path  empty-path
-           level (.-shift set)]
-      (let [keys-l (node-len node)]
+    (loop [node       (.-root set)
+           path       empty-path
+           level      (.-shift set)
+           path-left  path-left
+           path-right path-right]
+      (let [keys-l (node-len node)
+            left   (path-get path-left level)
+            right  (some-> path-right (path-get level))]
         (if (== 0 level)
           (let [keys (.-keys node)
-                idx  (binary-search-l comparator keys (dec keys-l) key)]
+                idx  (binary-search-l comparator keys left (safe-min right (dec keys-l)) key)]
             (if (== keys-l idx)
               nil
               (path-set path 0 idx)))
           (let [keys (.-keys node)
-                idx  (binary-search-l comparator keys (- keys-l 2) key)]
+                idx  (binary-search-l comparator keys left (safe-min right (- keys-l 2)) key)]
             (recur
               (arrays/aget (.-pointers node) idx)
               (path-set path level idx)
-              (dec level))))))))
+              (dec level)
+              (if (== idx left) path-left empty-path)
+              (if (== idx right) path-right nil))))))))
 
 (defn- -rseek*
   "Returns path to the first element that is > key.
    If all elements in a set are <= key, returns `(-rpath set) + 1`.
    It’s a virtual path that is bigger than any path in a tree"
-  [set key comparator]
+  [set key path-left path-right comparator]
   (if (nil? key)
     (path-inc (-rpath (.-root set) empty-path (.-shift set)))
-    (loop [node  (.-root set)
-           path  empty-path
-           level (.-shift set)]
-      (let [keys-l (node-len node)]
+    (loop [node       (.-root set)
+           path       empty-path
+           level      (.-shift set)
+           path-left  path-left
+           path-right path-right]
+      (let [keys-l (node-len node)
+            left   (path-get path-left level)
+            right  (some-> path-right (path-get level))]
         (if (== 0 level)
           (let [keys (.-keys node)
-                idx  (binary-search-r comparator keys (dec keys-l) key)
+                idx  (binary-search-r comparator keys left (safe-min right (dec keys-l)) key)
                 res  (path-set path 0 idx)]
             res)
           (let [keys (.-keys node)
-                idx  (binary-search-r comparator keys (- keys-l 2) key)
+                idx  (binary-search-r comparator keys left (safe-min right (- keys-l 2)) key)
                 res  (path-set path level idx)]
             (recur
               (arrays/aget (.-pointers node) idx)
               res
-              (dec level))))))))
+              (dec level)
+              (if (== idx left) path-left empty-path)
+              (if (== idx right) path-right nil))))))))
 
 (defn- -slice [set key-from key-to comparator]
-  (when-some [path (-seek* set key-from comparator)]
-    (let [till-path (-rseek* set key-to comparator)]
-      (when (path-lt path till-path)
-        (Iter. set path till-path (keys-for set path) (path-get path 0))))))
+  (let [[set path-left path-right] (if (instance? Iter set)
+                                     [(.-set set) (.-left set) (prev-path (.-set set) (.-right set))]
+                                     [set empty-path nil])]
+    (when-some [path (-seek* set key-from path-left path-right comparator)]
+      (let [till-path (-rseek* set key-to path-left path-right comparator)]
+        (when (path-lt path till-path)
+          (Iter. set path till-path (keys-for set path) (path-get path 0)))))))
 
 (defn- arr-map-inplace [f arr]
   (let [len (arrays/alength arr)]
