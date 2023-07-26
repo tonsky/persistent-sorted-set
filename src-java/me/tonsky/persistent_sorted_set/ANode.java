@@ -1,7 +1,6 @@
 package me.tonsky.persistent_sorted_set;
 
 import java.util.*;
-import java.util.concurrent.atomic.*;
 import java.util.function.*;
 import clojure.lang.*;
 
@@ -14,15 +13,14 @@ public abstract class ANode<Key, Address> {
   // Only valid [0 ... _len-1]
   public final Key[] _keys;
 
-  // Nullable
-  public final AtomicBoolean _edit;
+  public final Settings _settings;
 
-  public ANode(int len, Key[] keys, AtomicBoolean edit) {
+  public ANode(int len, Key[] keys, Settings settings) {
     assert keys.length >= len;
 
     _len   = len;
     _keys  = keys;
-    _edit  = edit;
+    _settings  = settings;
   }
 
   public int len() {
@@ -46,7 +44,7 @@ public abstract class ANode<Key, Address> {
   }
 
   public boolean editable() {
-    return _edit != null && _edit.get();
+    return _settings.editable();
   }
 
   public int search(Key key, Comparator<Key> cmp) {
@@ -97,11 +95,11 @@ public abstract class ANode<Key, Address> {
     return low - 1;
   }
 
-  public static <Key, Address> ANode restore(int level, List<Key> keys, List<Address> addresses) {
+  public static <Key, Address> ANode restore(int level, List<Key> keys, List<Address> addresses, Settings settings) {
     if (level == 0 || addresses == null) {
-      return new Leaf(keys);
+      return new Leaf(keys, settings);
     } else {
-      return new Branch(level, keys, addresses);
+      return new Branch(level, keys, addresses, settings);
     }
   }
 
@@ -116,16 +114,16 @@ public abstract class ANode<Key, Address> {
   // 0 for Leafs, 1+ for Branches
   public abstract int level();
   public abstract boolean contains(IStorage storage, Key key, Comparator<Key> cmp);
-  public abstract ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, AtomicBoolean edit);
-  public abstract ANode[] remove(IStorage storage, Key key, ANode left, ANode right, Comparator<Key> cmp, AtomicBoolean edit);
+  public abstract ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, Settings settings);
+  public abstract ANode[] remove(IStorage storage, Key key, ANode left, ANode right, Comparator<Key> cmp, Settings settings);
   public abstract String str(IStorage storage, int lvl);
   public abstract void walkAddresses(IStorage storage, IFn onAddress);
   public abstract Address store(IStorage<Key, Address> storage);
   public abstract void toString(StringBuilder sb, Address address, String indent);
 
-  protected static int newLen(int len, AtomicBoolean edit) {
-    if (edit != null && edit.get())
-        return Math.min(PersistentSortedSet.MAX_LEN, len + PersistentSortedSet.EXPAND_LEN);
+  protected static int newLen(int len, Settings settings) {
+    if (settings.editable())
+        return Math.min(settings.maxLen(), len + settings.expandLen());
     else
         return len;
   }

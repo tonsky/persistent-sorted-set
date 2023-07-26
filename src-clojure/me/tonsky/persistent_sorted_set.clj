@@ -9,7 +9,7 @@
     [java.lang.ref SoftReference]
     [java.util Comparator Arrays]
     [java.util.function BiConsumer]
-    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet Seq]))
+    [me.tonsky.persistent_sorted_set ANode ArrayUtil Branch IStorage Leaf PersistentSortedSet RefType Settings Seq]))
 
 (set! *warn-on-reflection* true)
 
@@ -18,12 +18,10 @@
   [^PersistentSortedSet set key ^Comparator cmp]
   (.cons set key cmp))
 
-
 (defn disj
   "Analogue to [[clojure.core/disj]] with comparator that overrides the one stored in set."
   [^PersistentSortedSet set key ^Comparator cmp]
   (.disjoin set key cmp))
-
 
 (defn slice
   "An iterator for part of the set with provided boundaries.
@@ -35,7 +33,6 @@
   ([^PersistentSortedSet set from to ^Comparator cmp]
    (.slice set from to cmp)))
 
-
 (defn rslice
   "A reverse iterator for part of the set with provided boundaries.
    `(rslice set from to)` returns backwards iterator for all Xs where from <= X <= to.
@@ -46,7 +43,6 @@
   ([^PersistentSortedSet set from to ^Comparator cmp]
    (.rslice set from to cmp)))
 
-
 (defn seek
   "An efficient way to seek to a specific key in a seq (either returned by [[clojure.core.seq]] or a slice.)
   `(seek (seq set) to)` returns iterator for all Xs where to <= X.
@@ -56,7 +52,6 @@
   ([seq to cmp]
    (.seek ^Seq seq to ^Comparator cmp)))
 
-
 (defn- array-from-indexed [coll type from to]
   (cond
     (instance? clojure.lang.Indexed coll)
@@ -64,7 +59,6 @@
 
     (arrays/array? coll)
     (Arrays/copyOfRange coll from to (arrays/array-type type))))
-
 
 (defn- split
   ([coll to type avg max]
@@ -86,18 +80,35 @@
          (conj! (array-from-indexed coll type from (+ from (quot len 2))))
          (conj! (array-from-indexed coll type (+ from (quot len 2)) to)))))))
 
+(defn- map->settings ^Settings [m]
+  (Settings.
+    (int (or (:max-len m) 0))
+    (case (:ref-type m)
+      :strong RefType/STRONG
+      :soft   RefType/SOFT
+      :weak   RefType/WEAK
+      nil)))
+
+(defn- settings->map [^Settings s]
+  {:max-len  (.maxLen s)
+   :ref-type (condp identical? (.refType s)
+               RefType/STRONG :strong
+               RefType/SOFT   :soft
+               RefType/WEAK   :weak)})
 
 (defn from-sorted-array
   "Fast path to create a set if you already have a sorted array of elements on your hands."
   ([^Comparator cmp keys]
-   (from-sorted-array cmp keys (arrays/alength keys)))
+   (from-sorted-array cmp keys (arrays/alength keys) (Settings.)))
   ([^Comparator cmp keys len]
-   (let [max       PersistentSortedSet/MAX_LEN
-         avg       (quot (+ PersistentSortedSet/MIN_LEN max) 2)
+   (from-sorted-array cmp keys len (Settings.)))
+  ([^Comparator cmp keys len opts]
+   (let [settings  (map->settings opts)
+         max       (.maxLen settings)
+         avg       (-> (.minLen settings) (+ max) (quot 2))
          storage   nil
-         edit      nil
          ->Leaf    (fn [keys]
-                     (Leaf. (count keys) keys edit))
+                     (Leaf. (count keys) keys settings))
          ->Branch  (fn [level ^objects children]
                      (Branch.
                        level
@@ -105,58 +116,65 @@
                        ^objects (arrays/amap #(.maxKey ^ANode %) Object children)
                        nil
                        children
-                       edit))]
+                       settings))]
      (loop [level 1
             nodes (mapv ->Leaf (split keys len Object avg max))]
        (case (count nodes)
-         0 (PersistentSortedSet. cmp)
-         1 (PersistentSortedSet. {} cmp nil storage (first nodes) len edit 0)
+         0 (PersistentSortedSet. {} cmp settings)
+         1 (PersistentSortedSet. {} cmp nil storage (first nodes) len settings 0)
          (recur (inc level) (mapv #(->Branch level %) (split nodes (count nodes) Object avg max))))))))
-
 
 (defn from-sequential
   "Create a set with custom comparator and a collection of keys. Useful when you don’t want to call [[clojure.core/apply]] on [[sorted-set-by]]."
-  [^Comparator cmp keys]
-  (let [arr (to-array keys)
-        _   (arrays/asort arr cmp)
-        len (ArrayUtil/distinct cmp arr)]
-    (from-sorted-array cmp arr len)))
+  ([^Comparator cmp keys]
+   (from-sequential cmp keys (Settings.)))
+  ([^Comparator cmp keys opts]
+   (let [arr (to-array keys)
+         _   (arrays/asort arr cmp)
+         len (ArrayUtil/distinct cmp arr)]
+     (from-sorted-array cmp arr len opts))))
 
+(defn sorted-set-opts
+  "Create a set with custom comparator, metadata and settings"
+  [opts]
+  (PersistentSortedSet.
+    (:meta opts)
+    ^Comparator (or (:cmp opts) compare)
+    (map->settings opts)))
 
 (defn sorted-set-by
   "Create a set with custom comparator."
   ([cmp] (PersistentSortedSet. ^Comparator cmp))
   ([cmp & keys] (from-sequential cmp keys)))
 
-
 (defn sorted-set
   "Create a set with default comparator."
   ([] (PersistentSortedSet/EMPTY))
   ([& keys] (from-sequential compare keys)))
 
-
 (defn restore-by
   "Constructs lazily-loaded set from storage, root address and custom comparator.
    Supports all operations that normal in-memory impl would,
    will fetch missing nodes by calling IStorage::restore when needed"
-  [cmp address ^IStorage storage]
-  (PersistentSortedSet. nil cmp address storage nil -1 nil 0))
-
+  ([cmp address ^IStorage storage]
+   (restore-by cmp address storage {}))
+  ([cmp address ^IStorage storage opts]
+   (PersistentSortedSet. nil cmp address storage nil -1 (map->settings opts) 0)))
 
 (defn restore
   "Constructs lazily-loaded set from storage and root address.
    Supports all operations that normal in-memory impl would,
    will fetch missing nodes by calling IStorage::restore when needed"
-  [address ^IStorage storage]
-  (restore-by RT/DEFAULT_COMPARATOR address storage))
-
+  ([address storage]
+   (restore-by RT/DEFAULT_COMPARATOR address storage {}))
+  ([address ^IStorage storage opts]
+   (restore-by RT/DEFAULT_COMPARATOR address storage opts)))
 
 (defn walk-addresses
   "Visit each address used by this set. Usable for cleaning up
    garbage left in storage from previous versions of the set"
   [^PersistentSortedSet set consume-fn]
   (.walkAddresses set consume-fn))
-
 
 (defn store
   "Store each not-yet-stored node by calling IStorage::store and remembering
@@ -167,8 +185,5 @@
   ([^PersistentSortedSet set ^IStorage storage]
    (.store set storage)))
 
-
-(defn set-branching-factor!
-  "Global -- applies to all sets. Must be power of 2. Defaults to 64"
-  [n]
-  (PersistentSortedSet/setMaxLen n))
+(defn settings [^PersistentSortedSet set]
+  (settings->map (.-_settings set)))

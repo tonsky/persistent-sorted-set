@@ -1,22 +1,21 @@
 package me.tonsky.persistent_sorted_set;
 
 import java.util.*;
-import java.util.concurrent.atomic.*;
 import java.util.function.*;
 import clojure.lang.*;
 
 @SuppressWarnings("unchecked")
 public class Leaf<Key, Address> extends ANode<Key, Address> {
-  public Leaf(int len, Key[] keys, AtomicBoolean edit) {
-    super(len, keys, edit);
+  public Leaf(int len, Key[] keys, Settings settings) {
+    super(len, keys, settings);
   }
 
-  public Leaf(int len, AtomicBoolean edit) {
-    super(len, (Key[]) new Object[ANode.newLen(len, edit)], edit);
+  public Leaf(int len, Settings settings) {
+    super(len, (Key[]) new Object[ANode.newLen(len, settings)], settings);
   }
 
-  public Leaf(List<Key> keys) {
-    this(keys.size(), (Key[]) keys.toArray(), null);
+  public Leaf(List<Key> keys, Settings settings) {
+    this(keys.size(), (Key[]) keys.toArray(), settings);
   }
 
   @Override
@@ -35,7 +34,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
   }
 
   @Override
-  public ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, AtomicBoolean edit) {
+  public ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, Settings settings) {
     int idx = search(key, cmp);
     if (idx >= 0) // already in set
       return PersistentSortedSet.UNCHANGED;
@@ -58,8 +57,8 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     }
 
     // simply adding to array
-    if (_len < PersistentSortedSet.MAX_LEN) {
-      ANode n = new Leaf(_len + 1, edit);
+    if (_len < _settings.maxLen()) {
+      ANode n = new Leaf(_len + 1, settings);
       new Stitch(n._keys, 0)
         .copyAll(_keys, 0, ins)
         .copyOne(key)
@@ -73,8 +72,8 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
 
     // goes to first half
     if (ins < half1) {
-      Leaf n1 = new Leaf(half1, edit),
-           n2 = new Leaf(half2, edit);
+      Leaf n1 = new Leaf(half1, settings),
+           n2 = new Leaf(half2, settings);
       new Stitch(n1._keys, 0)
         .copyAll(_keys, 0, ins)
         .copyOne(key)
@@ -84,8 +83,8 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     }
 
     // copy first, insert to second
-    Leaf n1 = new Leaf(half1, edit),
-         n2 = new Leaf(half2, edit);
+    Leaf n1 = new Leaf(half1, settings),
+         n2 = new Leaf(half2, settings);
     ArrayUtil.copy(_keys, 0, half1, n1._keys, 0);
     new Stitch(n2._keys, 0)
       .copyAll(_keys, half1, ins)
@@ -95,7 +94,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
   }
 
   @Override
-  public ANode[] remove(IStorage storage, Key key, ANode _left, ANode _right, Comparator<Key> cmp, AtomicBoolean edit) {
+  public ANode[] remove(IStorage storage, Key key, ANode _left, ANode _right, Comparator<Key> cmp, Settings settings) {
     Leaf left = (Leaf) _left;
     Leaf right = (Leaf) _right;
 
@@ -106,7 +105,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     int newLen = _len - 1;
 
     // nothing to merge
-    if (newLen >= PersistentSortedSet.MIN_LEN || (left == null && right == null)) {
+    if (newLen >= _settings.minLen() || (left == null && right == null)) {
 
       // transient, can edit in place
       if (editable()) {
@@ -118,7 +117,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
       }
 
       // persistent
-      Leaf center = new Leaf(newLen, edit);
+      Leaf center = new Leaf(newLen, settings);
       new Stitch(center._keys, 0)
         .copyAll(_keys, 0, idx)
         .copyAll(_keys, idx + 1, _len);
@@ -126,8 +125,8 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     }
 
     // can join with left
-    if (left != null && left._len + newLen <= PersistentSortedSet.MAX_LEN) {
-      Leaf join = new Leaf(left._len + newLen, edit);
+    if (left != null && left._len + newLen <= _settings.maxLen()) {
+      Leaf join = new Leaf(left._len + newLen, settings);
       new Stitch(join._keys, 0)
         .copyAll(left._keys, 0,       left._len)
         .copyAll(_keys,      0,       idx)
@@ -136,8 +135,8 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     }
 
     // can join with right
-    if (right != null && newLen + right.len() <= PersistentSortedSet.MAX_LEN) {
-      Leaf join = new Leaf(newLen + right._len, edit);
+    if (right != null && newLen + right.len() <= _settings.maxLen()) {
+      Leaf join = new Leaf(newLen + right._len, settings);
       new Stitch(join._keys, 0)
         .copyAll(_keys,       0,       idx)
         .copyAll(_keys,       idx + 1, _len)
@@ -162,7 +161,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
         ArrayUtil.copy(left._keys, newLeftLen, left._len, _keys, 0);
         _len = newCenterLen;
       } else {
-        newCenter = new Leaf(newCenterLen, edit);
+        newCenter = new Leaf(newCenterLen, settings);
         new Stitch(newCenter._keys, 0)
           .copyAll(left._keys, newLeftLen, left._len)
           .copyAll(_keys,      0,          idx)
@@ -174,7 +173,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
         newLeft  = left;
         left._len = newLeftLen;
       } else {
-        newLeft = new Leaf(newLeftLen, edit);
+        newLeft = new Leaf(newLeftLen, settings);
         ArrayUtil.copy(left._keys, 0, newLeftLen, newLeft._keys, 0);
       }
 
@@ -198,7 +197,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
           .copyAll(right._keys, 0,       rightHead);
         _len = newCenterLen;
       } else {
-        newCenter = new Leaf(newCenterLen, edit);
+        newCenter = new Leaf(newCenterLen, settings);
         new Stitch(newCenter._keys, 0)
           .copyAll(_keys,       0,       idx)
           .copyAll(_keys,       idx + 1, _len)
@@ -211,7 +210,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
         ArrayUtil.copy(right._keys, rightHead, right._len, right._keys, 0);
         right._len = newRightLen;
       } else {
-        newRight = new Leaf(newRightLen, edit);
+        newRight = new Leaf(newRightLen, settings);
         ArrayUtil.copy(right._keys, rightHead, right._len, newRight._keys, 0);
       }
 
@@ -222,6 +221,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
 
   @Override
   public void walkAddresses(IStorage storage, IFn onAddress) {
+    // noop
   }
 
   @Override

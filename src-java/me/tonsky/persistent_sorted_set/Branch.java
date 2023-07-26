@@ -2,7 +2,6 @@ package me.tonsky.persistent_sorted_set;
 
 import java.lang.ref.*;
 import java.util.*;
-import java.util.concurrent.atomic.*;
 import java.util.function.*;
 import clojure.lang.*;
 
@@ -17,17 +16,17 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
 
   // Nullable, null == children not populated yet
   // Only valid [0 ... _len-1]
-  // Object == ANode | SoftReference<ANode>
+  // Object == ANode | SoftReference<ANode> | WeakReference<ANode>
   public Object[] _children;
 
   // For i in [0.._len):
   // 
   // 1. Not stored:       (_addresses == null || _addresses[i] == null) && _children[i] == ANode
-  // 2. Stored:            _addresses[i] == Object && _children[i] == SoftReference<ANode>
+  // 2. Stored:            _addresses[i] == Object && _children[i] == WeakReference<ANode>
   // 3. Not restored yet:  _addresses[i] == Object && (_children == null || _children[i] == null)
 
-  public Branch(int level, int len, Key[] keys, Address[] addresses, Object[] children, AtomicBoolean edit) {
-    super(len, keys, edit);
+  public Branch(int level, int len, Key[] keys, Address[] addresses, Object[] children, Settings settings) {
+    super(len, keys, settings);
     assert level >= 1;
     assert addresses == null || addresses.length >= len : ("addresses = " + Arrays.toString(addresses) + ", len = " + len);
     assert children == null || children.length >= len;
@@ -37,8 +36,8 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     _children  = children;
   }
 
-  public Branch(int level, int len, AtomicBoolean edit) {
-    super(len, (Key[]) new Object[ANode.newLen(len, edit)], edit);
+  public Branch(int level, int len, Settings settings) {
+    super(len, (Key[]) new Object[ANode.newLen(len, settings)], settings);
     assert level >= 1;
 
     _level     = level;
@@ -46,8 +45,8 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     _children  = null;
   }
 
-  public Branch(int level, List<Key> keys, List<Address> addresses) {
-    this(level, keys.size(), (Key[]) keys.toArray(), (Address[]) addresses.toArray(), null, null);
+  public Branch(int level, List<Key> keys, List<Address> addresses, Settings settings) {
+    this(level, keys.size(), (Key[]) keys.toArray(), (Address[]) addresses.toArray(), null, settings);
   }
 
   protected Address[] ensureAddresses() {
@@ -86,7 +85,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
       //   _children[idx] = null;
       // }
       if (address != null && _children[idx] instanceof ANode) {
-        _children[idx] = new WeakReference(_children[idx]);
+        _children[idx] = _settings.makeReference(_children[idx]);
       }
     }
     return address;
@@ -99,17 +98,13 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     ANode child = null;
     if (_children != null) {
       Object ref = _children[idx];
-      if (ref instanceof Reference) {
-        child = (ANode) ((Reference) ref).get();
-      } else {
-        child = (ANode) ref;
-      }
+      child = (ANode) _settings.readReference(ref);
     }
 
     if (child == null) {
       assert _addresses[idx] != null;
       child = storage.restore(_addresses[idx]);
-      ensureChildren()[idx] = new WeakReference<ANode>(child);
+      ensureChildren()[idx] = _settings.makeReference(child);
     } else {
       if (_addresses != null && _addresses[idx] != null) {
         storage.accessed(_addresses[idx]);
@@ -158,7 +153,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
   }
 
   @Override
-  public ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, AtomicBoolean edit) {
+  public ANode[] add(IStorage storage, Key key, Comparator<Key> cmp, Settings settings) {
     int idx = search(key, cmp);
     if (idx >= 0) { // already in set
       return PersistentSortedSet.UNCHANGED;
@@ -167,7 +162,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     int ins = -idx - 1;
     if (ins == _len) ins = _len - 1;
     assert 0 <= ins && ins < _len;
-    ANode[] nodes = child(storage, ins).add(storage, key, cmp, edit);
+    ANode[] nodes = child(storage, ins).add(storage, key, cmp, settings);
 
     if (PersistentSortedSet.UNCHANGED == nodes) { // child signalling already in set
       return PersistentSortedSet.UNCHANGED;
@@ -214,12 +209,12 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
         newChildren[ins] = node;
       }
 
-      return new ANode[]{ new Branch(_level, _len, newKeys, newAddresses, newChildren, edit) };
+      return new ANode[]{ new Branch(_level, _len, newKeys, newAddresses, newChildren, settings) };
     }
 
     // len + 1
-    if (_len < PersistentSortedSet.MAX_LEN) {
-      Branch n = new Branch(_level, _len + 1, edit);
+    if (_len < _settings.maxLen()) {
+      Branch n = new Branch(_level, _len + 1, settings);
       new Stitch(n._keys, 0)
         .copyAll(_keys, 0, ins)
         .copyOne(nodes[0].maxKey())
@@ -287,8 +282,8 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
       }
 
       return new ANode[] {
-        new Branch(_level, half1, keys1, addresses1, children1, edit),
-        new Branch(_level, half2, keys2, addresses2, children2, edit)
+        new Branch(_level, half1, keys1, addresses1, children1, settings),
+        new Branch(_level, half2, keys2, addresses2, children2, settings)
       };
     }
 
@@ -329,13 +324,13 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
       .copyAll(_children, ins + 1, _len);
 
     return new ANode[]{
-      new Branch(_level, half1, keys1, addresses1, children1, edit),
-      new Branch(_level, half2, keys2, addresses2, children2, edit)
+      new Branch(_level, half1, keys1, addresses1, children1, settings),
+      new Branch(_level, half2, keys2, addresses2, children2, settings)
     };
   }
 
   @Override
-  public ANode[] remove(IStorage storage, Key key, ANode _left, ANode _right, Comparator<Key> cmp, AtomicBoolean edit) {
+  public ANode[] remove(IStorage storage, Key key, ANode _left, ANode _right, Comparator<Key> cmp, Settings settings) {
     Branch left = (Branch) _left;
     Branch right = (Branch) _right;
 
@@ -351,7 +346,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
           rightChild = idx < _len-1 ? child(storage, idx + 1) : null;
     int leftChildLen = safeLen(leftChild);
     int rightChildLen = safeLen(rightChild);
-    ANode[] nodes = child(storage, idx).remove(storage, key, leftChild, rightChild, cmp, edit);
+    ANode[] nodes = child(storage, idx).remove(storage, key, leftChild, rightChild, cmp, settings);
 
     if (PersistentSortedSet.UNCHANGED == nodes) // child signalling element not in set
       return PersistentSortedSet.UNCHANGED;
@@ -372,7 +367,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
                  + (nodes[2] != null ? 1 : 0);
 
     // no rebalance needed
-    if (newLen >= PersistentSortedSet.MIN_LEN || (left == null && right == null)) {
+    if (newLen >= _settings.minLen() || (left == null && right == null)) {
       // can update in place
       if (editable() && idx < _len-2) {
         Stitch ks = new Stitch(_keys, Math.max(idx-1, 0));
@@ -403,7 +398,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
         return PersistentSortedSet.EARLY_EXIT;
       }
 
-      Branch newCenter = new Branch(_level, newLen, edit);
+      Branch newCenter = new Branch(_level, newLen, settings);
 
       Stitch ks = new Stitch(newCenter._keys, 0);
       ks.copyAll(_keys, 0, idx - 1);
@@ -433,8 +428,8 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     }
 
     // can join with left
-    if (left != null && left._len + newLen <= PersistentSortedSet.MAX_LEN) {
-      Branch join = new Branch(_level, left._len + newLen, edit);
+    if (left != null && left._len + newLen <= _settings.maxLen()) {
+      Branch join = new Branch(_level, left._len + newLen, settings);
 
       Stitch ks = new Stitch(join._keys, 0);
       ks.copyAll(left._keys, 0, left._len);
@@ -467,8 +462,8 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     }
 
     // can join with right
-    if (right != null && newLen + right._len <= PersistentSortedSet.MAX_LEN) {
-      Branch join = new Branch(_level, newLen + right._len, edit);
+    if (right != null && newLen + right._len <= _settings.maxLen()) {
+      Branch join = new Branch(_level, newLen + right._len, settings);
 
       Stitch ks = new Stitch(join._keys, 0);
       ks.copyAll(_keys, 0, idx - 1);
@@ -506,8 +501,8 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
       int newLeftLen   = totalLen >>> 1;
       int newCenterLen = totalLen - newLeftLen;
 
-      Branch newLeft   = new Branch(_level, newLeftLen, edit);
-      Branch newCenter = new Branch(_level, newCenterLen, edit);
+      Branch newLeft   = new Branch(_level, newLeftLen, settings);
+      Branch newCenter = new Branch(_level, newCenterLen, settings);
 
       ArrayUtil.copy(left._keys, 0, newLeftLen, newLeft._keys, 0);
 
@@ -555,8 +550,8 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
           newRightLen  = totalLen - newCenterLen,
           rightHead    = right._len - newRightLen;
 
-      Branch newCenter = new Branch(_level, newCenterLen, edit),
-             newRight  = new Branch(_level, newRightLen, edit);
+      Branch newCenter = new Branch(_level, newCenterLen, settings),
+             newRight  = new Branch(_level, newRightLen, settings);
 
       Stitch ks = new Stitch(newCenter._keys, 0);
       ks.copyAll(_keys, 0, idx - 1);
@@ -648,11 +643,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
       if (_children != null) {
         Object ref = _children[i];
         if (ref != null) {
-          if (ref instanceof Reference) {
-            child = (ANode) ((Reference) ref).get();
-          } else {
-            child = (ANode) ref;
-          }
+          child = (ANode) _settings.readReference(ref);
         }
       }
       if (child != null)

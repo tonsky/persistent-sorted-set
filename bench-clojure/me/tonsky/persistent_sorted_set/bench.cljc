@@ -6,8 +6,6 @@
     [me.tonsky.persistent-sorted-set.bench.core :as bench.core]
     #?(:clj [me.tonsky.persistent-sorted-set.test.storage :as storage])))
 
-#?(:clj (set/set-branching-factor! 64))
-
 (def ints-10K
   (vec (shuffle (range 10000))))
 
@@ -48,7 +46,7 @@
     (defn disj-transient-10K []
       (persistent! (reduce disj! (transient set-10K) ints-10K))))
 
-(defn contains?-10K []
+(defn contains-10K []
   (doseq [x ints-10K]
     (contains? set-10K x)))
 
@@ -86,7 +84,7 @@
 (def benches
   {"conj-10K"        conj-10K
    "disj-10K"        disj-10K
-   "contains?-10K"   contains?-10K
+   "contains-10K"   contains-10K
    "doseq-300K"      doseq-300K
    "next-300K"       next-300K
    "reduce-300K"     reduce-300K

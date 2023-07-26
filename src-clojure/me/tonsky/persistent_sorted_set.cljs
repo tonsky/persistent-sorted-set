@@ -1065,20 +1065,24 @@
 
 (defn from-sorted-array
   "Fast path to create a set if you already have a sorted array of elements on your hands."
-  [cmp arr]
-  (let [leaves (->> arr
-                   (arr-partition-approx min-len max-len)
-                   (arr-map-inplace #(Leaf. %)))]
-    (loop [current-level leaves
-           shift 0]
-      (case (count current-level)
-        0 (BTSet. (Leaf. (arrays/array)) 0 0 cmp nil uninitialized-hash)
-        1 (BTSet. (first current-level) shift (arrays/alength arr) cmp nil uninitialized-hash)
-        (recur
-          (->> current-level
-            (arr-partition-approx min-len max-len)
-            (arr-map-inplace #(Node. (arrays/amap node-lim-key %) %)))
-          (inc shift))))))
+  ([cmp arr]
+   (from-sorted-array cmp arr (arrays/alength arr) {}))
+  ([cmp arr _len]
+   (from-sorted-array cmp arr _len {}))
+  ([cmp arr _len _opts]
+   (let [leaves (->> arr
+                    (arr-partition-approx min-len max-len)
+                    (arr-map-inplace #(Leaf. %)))]
+     (loop [current-level leaves
+            shift 0]
+       (case (count current-level)
+         0 (BTSet. (Leaf. (arrays/array)) 0 0 cmp nil uninitialized-hash)
+         1 (BTSet. (first current-level) shift (arrays/alength arr) cmp nil uninitialized-hash)
+         (recur
+           (->> current-level
+             (arr-partition-approx min-len max-len)
+             (arr-map-inplace #(Node. (arrays/amap node-lim-key %) %)))
+           (inc shift)))))))
 
 
 (defn from-sequential
@@ -1086,6 +1090,12 @@
   [cmp seq]
   (let [arr (-> (into-array seq) (arrays/asort cmp) (sorted-arr-distinct cmp))]
     (from-sorted-array cmp arr)))
+
+
+(defn sorted-set-opts
+  "Create a set with custom comparator, metadata and settings"
+  [opts]
+  (BTSet. (Leaf. (arrays/array)) 0 0 (or (:cmp opts) compare) (:meta opts) uninitialized-hash))
 
 
 (defn sorted-set-by
