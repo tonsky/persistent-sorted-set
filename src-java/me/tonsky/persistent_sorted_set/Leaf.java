@@ -57,7 +57,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     }
 
     // simply adding to array
-    if (_len < _settings.maxLen()) {
+    if (_len < _settings.branchingFactor()) {
       ANode n = new Leaf(_len + 1, settings);
       new Stitch(n._keys, 0)
         .copyAll(_keys, 0, ins)
@@ -105,7 +105,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     int newLen = _len - 1;
 
     // nothing to merge
-    if (newLen >= _settings.minLen() || (left == null && right == null)) {
+    if (newLen >= _settings.minBranchingFactor() || (left == null && right == null)) {
 
       // transient, can edit in place
       if (editable()) {
@@ -125,7 +125,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     }
 
     // can join with left
-    if (left != null && left._len + newLen <= _settings.maxLen()) {
+    if (left != null && left._len + newLen <= _settings.branchingFactor()) {
       Leaf join = new Leaf(left._len + newLen, settings);
       new Stitch(join._keys, 0)
         .copyAll(left._keys, 0,       left._len)
@@ -135,7 +135,7 @@ public class Leaf<Key, Address> extends ANode<Key, Address> {
     }
 
     // can join with right
-    if (right != null && newLen + right.len() <= _settings.maxLen()) {
+    if (right != null && newLen + right.len() <= _settings.branchingFactor()) {
       Leaf join = new Leaf(newLen + right._len, settings);
       new Stitch(join._keys, 0)
         .copyAll(_keys,       0,       idx)

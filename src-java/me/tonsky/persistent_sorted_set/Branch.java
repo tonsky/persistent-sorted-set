@@ -213,7 +213,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     }
 
     // len + 1
-    if (_len < _settings.maxLen()) {
+    if (_len < _settings.branchingFactor()) {
       Branch n = new Branch(_level, _len + 1, settings);
       new Stitch(n._keys, 0)
         .copyAll(_keys, 0, ins)
@@ -367,7 +367,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
                  + (nodes[2] != null ? 1 : 0);
 
     // no rebalance needed
-    if (newLen >= _settings.minLen() || (left == null && right == null)) {
+    if (newLen >= _settings.minBranchingFactor() || (left == null && right == null)) {
       // can update in place
       if (editable() && idx < _len-2) {
         Stitch ks = new Stitch(_keys, Math.max(idx-1, 0));
@@ -428,7 +428,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     }
 
     // can join with left
-    if (left != null && left._len + newLen <= _settings.maxLen()) {
+    if (left != null && left._len + newLen <= _settings.branchingFactor()) {
       Branch join = new Branch(_level, left._len + newLen, settings);
 
       Stitch ks = new Stitch(join._keys, 0);
@@ -462,7 +462,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     }
 
     // can join with right
-    if (right != null && newLen + right._len <= _settings.maxLen()) {
+    if (right != null && newLen + right._len <= _settings.branchingFactor()) {
       Branch join = new Branch(_level, newLen + right._len, settings);
 
       Stitch ks = new Stitch(join._keys, 0);

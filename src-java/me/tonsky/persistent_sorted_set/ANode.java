@@ -123,7 +123,7 @@ public abstract class ANode<Key, Address> {
 
   protected static int newLen(int len, Settings settings) {
     if (settings.editable())
-        return Math.min(settings.maxLen(), len + settings.expandLen());
+        return Math.min(settings.branchingFactor(), len + settings.expandLen());
     else
         return len;
   }

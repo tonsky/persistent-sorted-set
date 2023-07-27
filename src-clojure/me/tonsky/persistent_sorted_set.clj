@@ -82,7 +82,7 @@
 
 (defn- map->settings ^Settings [m]
   (Settings.
-    (int (or (:max-len m) 0))
+    (int (or (:branching-factor m) 0))
     (case (:ref-type m)
       :strong RefType/STRONG
       :soft   RefType/SOFT
@@ -90,11 +90,11 @@
       nil)))
 
 (defn- settings->map [^Settings s]
-  {:max-len  (.maxLen s)
-   :ref-type (condp identical? (.refType s)
-               RefType/STRONG :strong
-               RefType/SOFT   :soft
-               RefType/WEAK   :weak)})
+  {:branching-factor (.branchingFactor s)
+   :ref-type         (condp identical? (.refType s)
+                       RefType/STRONG :strong
+                       RefType/SOFT   :soft
+                       RefType/WEAK   :weak)})
 
 (defn from-sorted-array
   "Fast path to create a set if you already have a sorted array of elements on your hands."
@@ -103,26 +103,26 @@
   ([^Comparator cmp keys len]
    (from-sorted-array cmp keys len (Settings.)))
   ([^Comparator cmp keys len opts]
-   (let [settings  (map->settings opts)
-         max       (.maxLen settings)
-         avg       (-> (.minLen settings) (+ max) (quot 2))
-         storage   nil
-         ->Leaf    (fn [keys]
-                     (Leaf. (count keys) keys settings))
-         ->Branch  (fn [level ^objects children]
-                     (Branch.
-                       level
-                       (count children)
-                       ^objects (arrays/amap #(.maxKey ^ANode %) Object children)
-                       nil
-                       children
-                       settings))]
+   (let [settings             (map->settings opts)
+         max-branching-factor (.branchingFactor settings)
+         avg-branching-factor (-> (.minBranchingFactor settings) (+ max-branching-factor) (quot 2))
+         storage              nil
+         ->Leaf               (fn [keys]
+                                (Leaf. (count keys) keys settings))
+         ->Branch             (fn [level ^objects children]
+                                (Branch.
+                                  level
+                                  (count children)
+                                  ^objects (arrays/amap #(.maxKey ^ANode %) Object children)
+                                  nil
+                                  children
+                                  settings))]
      (loop [level 1
-            nodes (mapv ->Leaf (split keys len Object avg max))]
+            nodes (mapv ->Leaf (split keys len Object avg-branching-factor max-branching-factor))]
        (case (count nodes)
          0 (PersistentSortedSet. {} cmp settings)
          1 (PersistentSortedSet. {} cmp nil storage (first nodes) len settings 0)
-         (recur (inc level) (mapv #(->Branch level %) (split nodes (count nodes) Object avg max))))))))
+         (recur (inc level) (mapv #(->Branch level %) (split nodes (count nodes) Object avg-branching-factor max-branching-factor))))))))
 
 (defn from-sequential
   "Create a set with custom comparator and a collection of keys. Useful when you don’t want to call [[clojure.core/apply]] on [[sorted-set-by]]."

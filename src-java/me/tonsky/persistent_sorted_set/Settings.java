@@ -4,46 +4,46 @@ import java.lang.ref.*;
 import java.util.concurrent.atomic.*;
 
 public class Settings {
-  public final int _maxLen;
+  public final int _branchingFactor;
   public final RefType _refType;
   public final AtomicBoolean _edit;
 
-  public Settings(int maxLen, RefType refType, AtomicBoolean edit) {
-    _maxLen = maxLen;
+  public Settings(int branchingFactor, RefType refType, AtomicBoolean edit) {
+    _branchingFactor = branchingFactor;
     _refType = refType;
     _edit = edit;
   }
 
   public Settings() {
-    _maxLen = 64;
+    _branchingFactor = 64;
     _refType = RefType.SOFT;
     _edit = null;
   }
 
-  public Settings(int maxLen) {
-    _maxLen = maxLen;
+  public Settings(int branchingFactor) {
+    _branchingFactor = branchingFactor;
     _refType = RefType.SOFT;
     _edit = null;
   }
 
-  public Settings(int maxLen, RefType refType) {
-    if (maxLen <= 0) {
-      maxLen = 64;
+  public Settings(int branchingFactor, RefType refType) {
+    if (branchingFactor <= 0) {
+      branchingFactor = 64;
     }
     if (null == refType) {
       refType = RefType.SOFT;
     }
-    _maxLen = maxLen;
+    _branchingFactor = branchingFactor;
     _refType = refType;
     _edit = null;
   }
 
-  public int minLen() {
-    return _maxLen >>> 1;
+  public int minBranchingFactor() {
+    return _branchingFactor >>> 1;
   }
 
-  public int maxLen() {
-    return _maxLen;
+  public int branchingFactor() {
+    return _branchingFactor;
   }
 
   public int expandLen() {
@@ -61,7 +61,7 @@ public class Settings {
   public Settings editable(boolean value) {
     assert !editable();
     assert value == true;
-    return new Settings(_maxLen, _refType, new AtomicBoolean(value));
+    return new Settings(_branchingFactor, _refType, new AtomicBoolean(value));
   }
 
   public void persistent() {
@@ -69,16 +69,17 @@ public class Settings {
     _edit.set(false);
   }
 
-  public Object makeReference(Object value) {
+  public <T> Object makeReference(T value) {
     switch (_refType) {
     case STRONG:
       return value;
     case SOFT:
-      return new SoftReference(value);
+      return new SoftReference<T>(value);
     case WEAK:
-      return new WeakReference(value);
+      return new WeakReference<T>(value);
+    default:
+      throw new RuntimeException("Unexpected _refType: " + _refType);
     }
-    throw new RuntimeException("Unexpected _refType: " + _refType);
   }
 
   public Object readReference(Object ref) {
