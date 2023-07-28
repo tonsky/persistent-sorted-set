@@ -34,11 +34,11 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
   }
 
   public PersistentSortedSet(IPersistentMap meta, Comparator<Key> cmp) {
-    this(meta, cmp, new Settings());
+    this(meta, cmp, null, new Settings());
   }
 
-  public PersistentSortedSet(IPersistentMap meta, Comparator<Key> cmp, Settings settings) {
-    this(meta, cmp, null, null, new Leaf<Key, Address>(0, settings), 0, settings, 0);
+  public PersistentSortedSet(IPersistentMap meta, Comparator<Key> cmp, IStorage<Key, Address> storage, Settings settings) {
+    this(meta, cmp, null, storage, new Leaf<Key, Address>(0, settings), 0, settings, 0);
   }
 
   public PersistentSortedSet(IPersistentMap meta, Comparator<Key> cmp, Address address, IStorage<Key, Address> storage, Object root, int count, Settings settings, int version) {

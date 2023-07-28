@@ -1092,7 +1092,7 @@
     (from-sorted-array cmp arr)))
 
 
-(defn sorted-set-opts
+(defn sorted-set*
   "Create a set with custom comparator, metadata and settings"
   [opts]
   (BTSet. (Leaf. (arrays/array)) 0 0 (or (:cmp opts) compare) (:meta opts) uninitialized-hash))

@@ -106,7 +106,7 @@
    (let [settings             (map->settings opts)
          max-branching-factor (.branchingFactor settings)
          avg-branching-factor (-> (.minBranchingFactor settings) (+ max-branching-factor) (quot 2))
-         storage              nil
+         storage              (:storage opts)
          ->Leaf               (fn [keys]
                                 (Leaf. (count keys) keys settings))
          ->Branch             (fn [level ^objects children]
@@ -120,7 +120,7 @@
      (loop [level 1
             nodes (mapv ->Leaf (split keys len Object avg-branching-factor max-branching-factor))]
        (case (count nodes)
-         0 (PersistentSortedSet. {} cmp settings)
+         0 (PersistentSortedSet. {} cmp storage settings)
          1 (PersistentSortedSet. {} cmp nil storage (first nodes) len settings 0)
          (recur (inc level) (mapv #(->Branch level %) (split nodes (count nodes) Object avg-branching-factor max-branching-factor))))))))
 
@@ -134,12 +134,13 @@
          len (ArrayUtil/distinct cmp arr)]
      (from-sorted-array cmp arr len opts))))
 
-(defn sorted-set-opts
+(defn sorted-set*
   "Create a set with custom comparator, metadata and settings"
   [opts]
   (PersistentSortedSet.
     (:meta opts)
     ^Comparator (or (:cmp opts) compare)
+    (:storage opts)
     (map->settings opts)))
 
 (defn sorted-set-by
