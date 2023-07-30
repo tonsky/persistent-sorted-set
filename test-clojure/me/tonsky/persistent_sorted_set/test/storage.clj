@@ -123,7 +123,7 @@
   "Check that invalidating middle branch does not invalidates siblings"
   (let [size 7000 ;; 3-4 branches
         xs   (shuffle (range size))
-        set  (into (set/sorted-set) xs)]
+        set  (into (set/sorted-set* {:branching-factor 64}) xs)]
     (set/store set (storage))
     (is (= 1.0 (durable-ratio set))
       (let [set' (disj set 3500)] ;; one of the middle branches
@@ -191,7 +191,7 @@
 (deftest test-walk
   (let [size    1000000
         xs      (shuffle (range size))
-        set     (into (set/sorted-set) xs)
+        set     (into (set/sorted-set* {:branching-factor 64}) xs)
         *stored (atom 0)]
     (set/walk-addresses set
       (fn [addr]
@@ -213,14 +213,14 @@
   (let [size       1000000
         xs         (shuffle (range size))
         rm         (vec (repeatedly (quot size 5) #(rand-nth xs)))
-        original   (-> (reduce disj (into (set/sorted-set) xs) rm)
+        original   (-> (reduce disj (into (set/sorted-set* {:branching-factor 64}) xs) rm)
                      (disj (quot size 4) (quot size 2)))
         storage    (storage)
         address    (with-stats
                      (set/store original storage))
         _          (is (= 0 (:reads @*stats)))
         ; _          (is (> (:writes @*stats) (/ size PersistentSortedSet/MAX_LEN)))
-        loaded     (set/restore address storage)
+        loaded     (set/restore address storage {:branching-factor 64})
         _          (is (= 0 (:reads @*stats)))
         _          (is (= 0.0 (loaded-ratio loaded)))
         _          (is (= 1.0 (durable-ratio loaded)))

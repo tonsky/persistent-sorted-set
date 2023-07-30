@@ -15,20 +15,16 @@ public class Settings {
   }
 
   public Settings() {
-    _branchingFactor = 64;
-    _refType = RefType.SOFT;
-    _edit = null;
+    this(0, null);
   }
 
   public Settings(int branchingFactor) {
-    _branchingFactor = branchingFactor;
-    _refType = RefType.SOFT;
-    _edit = null;
+    this(branchingFactor, null);
   }
 
   public Settings(int branchingFactor, RefType refType) {
     if (branchingFactor <= 0) {
-      branchingFactor = 64;
+      branchingFactor = 512;
     }
     if (null == refType) {
       refType = RefType.SOFT;
