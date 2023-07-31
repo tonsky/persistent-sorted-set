@@ -1106,3 +1106,7 @@
 (defn sorted-set
   ([] (sorted-set-by compare))
   ([& keys] (from-sequential compare keys)))
+
+(defn settings [set]
+  {:branching-factor max-len
+   :ref-type :strong})

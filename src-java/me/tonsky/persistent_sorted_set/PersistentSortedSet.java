@@ -236,7 +236,7 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
 
   // IPersistentCollection
   public PersistentSortedSet empty() {
-    return new PersistentSortedSet(_meta, _cmp);
+    return new PersistentSortedSet(_meta, _cmp, _storage, _settings);
   }
 
   public PersistentSortedSet cons(Object key) {
