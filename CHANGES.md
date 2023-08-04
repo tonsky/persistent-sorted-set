@@ -1,3 +1,12 @@
+# 0.3.0
+
+- JVM: Per-set branching factor
+- JVM: Choose type of reference for stored nodes (strong, soft, weak) per set
+- JVM: Defaults to 512 branching factor, soft ref-type
+- Added `settings` and `sorted-set*`
+- JVM: Added `storage` and `opts` args to ctors
+- JVM: Short-circuit `walkAddresses`
+
 # 0.2.3
 
 - Support set > 1M in CLJS (< 16^6 = 16M for fast path, up to 32^10 = 10^15 theoretically)
