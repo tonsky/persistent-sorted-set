@@ -161,7 +161,9 @@ public class PersistentSortedSet<Key, Address> extends APersistentSortedSet<Key,
 
   public void walkAddresses(IFn onAddress) {
     if (_address != null) {
-      onAddress.invoke(_address);
+      if (!RT.booleanCast(onAddress.invoke(_address))) {
+        return;
+      }
     }
     root().walkAddresses(_storage, onAddress);
   }

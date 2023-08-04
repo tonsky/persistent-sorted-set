@@ -600,7 +600,9 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     for (int i = 0; i < _len; ++i) {
       Address address = address(i);
       if (address != null) {
-        onAddress.invoke(address);
+        if (!RT.booleanCast(onAddress.invoke(address))) {
+          continue;
+        }
       }
       if (_level > 1) {
         child(storage, i).walkAddresses(storage, onAddress);
