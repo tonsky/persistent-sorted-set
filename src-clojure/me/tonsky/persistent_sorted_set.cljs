@@ -5,14 +5,14 @@
   (:refer-clojure :exclude [conj disj sorted-set sorted-set-by])
   (:require
    [me.tonsky.persistent-sorted-set.arrays :as arrays]
-   [me.tonsky.persistent-sorted-set.impl :as impl :refer [BTSet]]
+   [me.tonsky.persistent-sorted-set.impl :as impl]
    [me.tonsky.persistent-sorted-set.protocol :refer [IStorage] :as protocol])
   (:require-macros
    [me.tonsky.persistent-sorted-set.arrays :as arrays]))
 
 (def conj impl/conj)
 (def disj impl/disj)
-(def BTSet BTset)
+(def BTSet impl/BTSet)
 
 (defn slice
   "An iterator for part of the set with provided boundaries.
