@@ -12,6 +12,7 @@
 
 (def conj impl/conj)
 (def disj impl/disj)
+(def BTSet BTset)
 
 (defn slice
   "An iterator for part of the set with provided boundaries.
