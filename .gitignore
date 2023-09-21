@@ -1,6 +1,5 @@
 .nrepl-port
 .lein-*
-target
 .DS_Store
 .idea
 pom.xml
