@@ -14,7 +14,7 @@
   :java-source-paths ["src-java"]
   :test-paths        ["test-clojure"]
 
-  ;; :javac-options ["-Xlint:unchecked" "-Xlint:-options" "-target" "8" "-source" "8" "-bootclasspath" ~(str (or (System/getenv "JAVA8_HOME") (throw (Exception. "Please set JAVA8_HOME"))) "/jre/lib/rt.jar")]
+  :javac-options ["-Xlint:unchecked" "-Xlint:-options" "-target" "8" "-source" "8" "-bootclasspath" ~(str (or (System/getenv "JAVA8_HOME") (throw (Exception. "Please set JAVA8_HOME"))) "/jre/lib/rt.jar")]
   :jvm-opts ["-ea"]
 
   :profiles
