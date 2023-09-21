@@ -16,7 +16,7 @@
 ;                         node.keys[i] == max(node.children[i].keys)
 ; All arrays are 16..32 elements, inclusive
 
-; PersistentSortedSet:    root       :: Node or Leaf
+; BTSet:    root       :: Node or Leaf
 ;           shift      :: depth - 1
 ;           cnt        :: size of a set, integer, rolling
 ;           comparator :: comparator used for ordering
@@ -468,7 +468,7 @@
         (let [new-keys (splice keys idx (inc idx) (arrays/array))]
           (rotate (Leaf. new-keys) root? left right))))))
 
-;; PersistentSortedSet
+;; BTSet
 
 (declare conj disj btset-iter)
 
@@ -479,21 +479,21 @@
   ;; ^:const
   uninitialized-address nil)
 
-(deftype PersistentSortedSet [storage root shift cnt comparator meta ^:mutable _hash ^:mutable _address]
+(deftype BTSet [storage root shift cnt comparator meta ^:mutable _hash ^:mutable _address]
   Object
   (toString [this] (pr-str* this))
 
   ICloneable
-  (-clone [_] (PersistentSortedSet. storage root shift cnt comparator meta _hash _address))
+  (-clone [_] (BTSet. storage root shift cnt comparator meta _hash _address))
 
   IWithMeta
-  (-with-meta [_ new-meta] (PersistentSortedSet. storage root shift cnt comparator new-meta _hash _address))
+  (-with-meta [_ new-meta] (BTSet. storage root shift cnt comparator new-meta _hash _address))
 
   IMeta
   (-meta [_] meta)
 
   IEmptyableCollection
-  (-empty [_] (PersistentSortedSet. storage (Leaf. (arrays/array)) 0 0 comparator meta uninitialized-hash uninitialized-address))
+  (-empty [_] (BTSet. storage (Leaf. (arrays/array)) 0 0 comparator meta uninitialized-hash uninitialized-address))
 
   IEquiv
   (-equiv [this other]
@@ -584,8 +584,8 @@
        (child node (path-get path level) (.-storage set)))
       (.-keys node))))
 
-(defn alter-btset [^PersistentSortedSet set root shift cnt]
-  (PersistentSortedSet. (.-storage set) root shift cnt (.-comparator set) (.-meta set) uninitialized-hash uninitialized-address))
+(defn alter-btset [^BTSet set root shift cnt]
+  (BTSet. (.-storage set) root shift cnt (.-comparator set) (.-meta set) uninitialized-hash uninitialized-address))
 
 ;; iteration
 
@@ -732,7 +732,7 @@
 
 (declare -seek* -rseek*)
 
-(deftype Iter [^PersistentSortedSet set left right keys idx]
+(deftype Iter [^BTSet set left right keys idx]
   IIter
   (-copy [_ l r]
     (Iter. set l r (keys-for set l) (path-get l 0)))
@@ -849,7 +849,7 @@
 
 ;; reverse iteration
 
-(deftype ReverseIter [^PersistentSortedSet set left right keys idx]
+(deftype ReverseIter [^BTSet set left right keys idx]
   IIter
   (-copy [_ l r]
     (ReverseIter. set l r (keys-for set r) (path-get r 0)))
@@ -913,12 +913,12 @@
   (-pr-writer [this writer opts]
     (pr-sequential-writer writer pr-writer "(" " " ")" opts (seq this))))
 
-(defn riter [^PersistentSortedSet set left right]
+(defn riter [^BTSet set left right]
   (ReverseIter. set left right (keys-for set right) (path-get right 0)))
 
 ;; distance
 
-(defn- -distance [^PersistentSortedSet set ^Node node left right level]
+(defn- -distance [^BTSet set ^Node node left right level]
   (let [idx-l (path-get left level)
         idx-r (path-get right level)]
     (if (pos? level)
@@ -932,7 +932,7 @@
             (recur (dec level) (* res avg-len)))))
       (- idx-r idx-l))))
 
-(defn- distance [^PersistentSortedSet set path-l path-r]
+(defn- distance [^BTSet set path-l path-r]
   (cond
     (path-eq path-l path-r)
     0
@@ -954,7 +954,7 @@
 (defn- -seek*
   "Returns path to first element >= key,
    or -1 if all elements in a set < key"
-  [^PersistentSortedSet set key comparator]
+  [^BTSet set key comparator]
   (if (nil? key)
     empty-path
     (loop [node  (.-root set)
@@ -978,7 +978,7 @@
   "Returns path to the first element that is > key.
    If all elements in a set are <= key, returns `(-rpath set) + 1`.
    It’s a virtual path that is bigger than any path in a tree"
-  [^PersistentSortedSet set key comparator]
+  [^BTSet set key comparator]
   (if (nil? key)
     (path-inc (-rpath (.-root set) empty-path (.-shift set)))
     (loop [node  (.-root set)
@@ -998,7 +998,7 @@
              res
              (dec level))))))))
 
-(defn -slice [^PersistentSortedSet set key-from key-to comparator]
+(defn -slice [^BTSet set key-from key-to comparator]
   (when-some [path (-seek* set key-from comparator)]
     (let [till-path (-rseek* set key-to comparator)]
       (when (path-lt path till-path)
@@ -1069,7 +1069,7 @@
 
 (defn conj
   "Analogue to [[clojure.core/conj]] with comparator that overrides the one stored in set."
-  [^PersistentSortedSet set key cmp]
+  [^BTSet set key cmp]
   (let [roots (node-conj (.-root set) cmp key (.-storage set))]
     (cond
       ;; tree not changed
@@ -1092,7 +1092,7 @@
 
 (defn disj
   "Analogue to [[clojure.core/disj]] with comparator that overrides the one stored in set."
-  [^PersistentSortedSet set key cmp]
+  [^BTSet set key cmp]
   (let [new-roots (node-disj (.-root set) cmp key true nil nil (.-storage set))]
     (if (nil? new-roots) ;; nothing changed, key wasn't in the set
       set

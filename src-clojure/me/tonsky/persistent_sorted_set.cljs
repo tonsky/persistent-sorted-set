@@ -5,7 +5,7 @@
   (:refer-clojure :exclude [conj disj sorted-set sorted-set-by])
   (:require
    [me.tonsky.persistent-sorted-set.arrays :as arrays]
-   [me.tonsky.persistent-sorted-set.impl :as impl :refer [PersistentSortedSet]]
+   [me.tonsky.persistent-sorted-set.impl :as impl :refer [BTSet]]
    [me.tonsky.persistent-sorted-set.protocol :refer [IStorage] :as protocol])
   (:require-macros
    [me.tonsky.persistent-sorted-set.arrays :as arrays]))
@@ -17,9 +17,9 @@
   "An iterator for part of the set with provided boundaries.
    `(slice set from to)` returns iterator for all Xs where from <= X <= to.
    Optionally pass in comparator that will override the one that set uses. Supports efficient [[clojure.core/rseq]]."
-  ([^PersistentSortedSet set key-from key-to]
+  ([^BTSet set key-from key-to]
    (impl/-slice set key-from key-to (.-comparator set)))
-  ([^PersistentSortedSet set key-from key-to comparator]
+  ([^BTSet set key-from key-to comparator]
    ;; (js/console.trace)
    (impl/-slice set key-from key-to comparator)))
 
@@ -28,11 +28,11 @@
   "A reverse iterator for part of the set with provided boundaries.
    `(rslice set from to)` returns backwards iterator for all Xs where from <= X <= to.
    Optionally pass in comparator that will override the one that set uses. Supports efficient [[clojure.core/rseq]]."
-  ([^PersistentSortedSet set key]
+  ([^BTSet set key]
    (some-> (impl/-slice set key key (.-comparator set)) rseq))
-  ([^PersistentSortedSet set key-from key-to]
+  ([^BTSet set key-from key-to]
    (some-> (impl/-slice set key-to key-from (.-comparator set)) rseq))
-  ([^PersistentSortedSet set key-from key-to comparator]
+  ([^BTSet set key-from key-to comparator]
    (some-> (impl/-slice set key-to key-from comparator) rseq)))
 
 
@@ -60,9 +60,9 @@
      (loop [current-level leaves
             shift 0]
        (case (count current-level)
-         0 (impl/PersistentSortedSet. storage (impl/Leaf. (arrays/array)) 0 0 cmp nil
+         0 (impl/BTSet. storage (impl/Leaf. (arrays/array)) 0 0 cmp nil
                         impl/uninitialized-hash impl/uninitialized-address)
-         1 (impl/PersistentSortedSet. storage (first current-level) shift (arrays/alength arr) cmp nil
+         1 (impl/BTSet. storage (first current-level) shift (arrays/alength arr) cmp nil
                         impl/uninitialized-hash impl/uninitialized-address)
          (recur
           (->> current-level
@@ -79,11 +79,11 @@
 (defn sorted-set*
   "Create a set with custom comparator, metadata and settings"
   [opts]
-  (impl/PersistentSortedSet. (:storage opts) (impl/Leaf. (arrays/array)) 0 0 (or (:cmp opts) compare) (:meta opts)
+  (impl/BTSet. (:storage opts) (impl/Leaf. (arrays/array)) 0 0 (or (:cmp opts) compare) (:meta opts)
                impl/uninitialized-hash impl/uninitialized-address))
 
 (defn sorted-set-by
-  ([cmp] (impl/PersistentSortedSet. nil (impl/Leaf. (arrays/array)) 0 0 cmp nil
+  ([cmp] (impl/BTSet. nil (impl/Leaf. (arrays/array)) 0 0 cmp nil
                       impl/uninitialized-hash impl/uninitialized-address))
   ([cmp & keys] (from-sequential cmp keys)))
 
@@ -99,7 +99,7 @@
    (restore-by cmp address storage {}))
   ([cmp address ^IStorage storage {:keys [set-metadata]}]
    (when-let [root (protocol/restore storage address)]
-     (impl/PersistentSortedSet. storage root
+     (impl/BTSet. storage root
                                 (:shift set-metadata)
                                 (:count set-metadata)
                                 cmp nil impl/uninitialized-hash address))))
@@ -117,7 +117,7 @@
   "Store each not-yet-stored node by calling IStorage::store and remembering
    returned address. Incremental, won’t store same node twice on subsequent calls.
    Returns root address. Remember it and use it for restore"
-  [^PersistentSortedSet set ^IStorage storage]
+  [^BTSet set ^IStorage storage]
   (impl/store set storage))
 
 (defn settings [set]
