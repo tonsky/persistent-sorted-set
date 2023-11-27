@@ -276,6 +276,10 @@
   (node-conj          [_ cmp key storage])
   (node-disj          [_ cmp key root? left right storage]))
 
+(defn- set-child
+  [children idx child]
+  (aset children idx child))
+
 (defn- rotate [node root? left right]
   (cond
     ;; root never merges
@@ -313,6 +317,28 @@
   (when (empty? (.-addresses node))
     (set! (.-addresses node) (arrays/make-array size))))
 
+(defn- set-address!
+  [addresses idx address]
+  (aset addresses idx address))
+
+(declare Node)
+
+(defn new-node
+  [keys children addresses]
+  (let [addresses (if (nil? addresses)
+                    (arrays/make-array (arrays/alength keys))
+                    addresses)]
+    (when (not= (count keys) (count children) (count addresses))
+      (js/console.trace))
+
+    (assert (= (count keys) (count children) (count addresses))
+            (str
+             "counts not matched"
+             {:keys-count (count keys)
+              :children-count (count children)
+              :addresses-count (count addresses)}))
+    (Node. keys children addresses)))
+
 (deftype Node [keys children ^:mutable addresses]
   IStore
   (store-aux [this ^IStorage storage]
@@ -321,10 +347,13 @@
     ;; Children first
     (dorun
      (map-indexed
-      (fn [idx child]
-        (when-let [address (protocol/store storage child)]
-          (aset addresses idx address)))
-      children))
+      (fn [idx address]
+        (when (nil? address)
+          (assert (not (nil? children)))
+          (assert (not (nil? (aget children idx))))
+          (let [address (store-aux (aget children idx) storage)]
+            (set-address! addresses idx address))))
+      addresses))
     (protocol/store storage this))
 
   INode
@@ -335,11 +364,14 @@
     (arrays/alength keys))
 
   (node-merge [this ^Node next]
+    (assert (and (= (count keys) (count children))
+                 (= (count (.-keys next))
+                    (count (.-children next)))))
     (ensure-addresses! this (count children))
     (ensure-addresses! next (count (.-children next)))
-    (Node. (arrays/aconcat keys (.-keys next))
-           (arrays/aconcat children (.-children next))
-           (arrays/aconcat addresses (.-addresses next))))
+    (new-node (arrays/aconcat keys (.-keys next))
+              (arrays/aconcat children (.-children next))
+              (arrays/aconcat addresses (.-addresses next))))
 
   (node-merge-n-split [this ^Node next]
     (ensure-addresses! this (count children))
@@ -347,15 +379,18 @@
     (let [ks (merge-n-split keys     (.-keys next))
           ps (merge-n-split children (.-children next))
           as (merge-n-split addresses (.-addresses next))]
-      (return-array (Node. (arrays/aget ks 0)
-                           (arrays/aget ps 0)
-                           (arrays/aget as 0))
-                    (Node. (arrays/aget ks 1)
-                           (arrays/aget ps 1)
-                           (arrays/aget as 1)))))
+      (return-array (new-node (arrays/aget ks 0)
+                              (arrays/aget ps 0)
+                              (arrays/aget as 0))
+                    (new-node (arrays/aget ks 1)
+                              (arrays/aget ps 1)
+                              (arrays/aget as 1)))))
 
-  (node-child [_ idx ^IStorage storage]
+  (node-child [_this idx ^IStorage storage]
     (when-not (= -1 idx)
+      (assert (or (and (seq children) (arrays/aget children idx)) ; child exists
+                  (and (seq addresses) (arrays/aget addresses idx)))
+              (str "Neither child or address exists" {:keys keys :addresses addresses :idx idx :children children}))
       (let [child (arrays/aget children idx)
             address (when addresses (arrays/aget addresses idx))]
         (if-not child
@@ -379,18 +414,19 @@
         (let [new-keys     (check-n-splice cmp keys     idx (inc idx) (arrays/amap node-lim-key nodes))
               new-children (splice             children idx (inc idx) nodes)
               new-addresses (splice addresses idx (inc idx) (arrays/make-array (count nodes)))]
+          (assert (every? some? new-children) (str "children is nil: " new-children))
           (if (<= (arrays/alength new-children) max-len)
             ;; ok as is
-            (arrays/array (Node. new-keys new-children new-addresses))
+            (arrays/array (new-node new-keys new-children new-addresses))
             ;; gotta split it up
             (let [middle  (arrays/half (arrays/alength new-children))]
               (arrays/array
-               (Node. (.slice new-keys     0 middle)
-                      (.slice new-children 0 middle)
-                      (.slice new-addresses 0 middle))
-               (Node. (.slice new-keys     middle)
-                      (.slice new-children middle)
-                      (.slice new-addresses middle)))))))))
+               (new-node (.slice new-keys     0 middle)
+                         (.slice new-children 0 middle)
+                         (.slice new-addresses 0 middle))
+               (new-node (.slice new-keys     middle)
+                         (.slice new-children middle)
+                         (.slice new-addresses middle)))))))))
 
   (node-disj [this cmp key root? left right storage]
     (ensure-addresses! this (count children))
@@ -406,8 +442,9 @@
             (let [left-idx     (if left-child  (dec idx) idx)
                   right-idx    (if right-child (+ 2 idx) (+ 1 idx))
                   new-keys     (check-n-splice cmp keys     left-idx right-idx (arrays/amap node-lim-key disjned))
-                  new-children (splice             children left-idx right-idx disjned)]
-              (rotate (Node. new-keys new-children addresses) root? left right))))))))
+                  new-children (splice             children left-idx right-idx disjned)
+                  new-addresses (splice            addresses left-idx right-idx (arrays/make-array (count disjned)))]
+              (rotate (new-node new-keys new-children new-addresses) root? left right))))))))
 
 (deftype Leaf [keys]
   IStore
@@ -519,7 +556,7 @@
     (let [storage (or storage storage*)]
       (assert (some? storage))
       (when (nil? _address)
-        (set! _address (protocol/store storage root)))
+        (set! _address (store-aux root storage)))
       _address))
 
   ILookup
@@ -574,9 +611,8 @@
 
 (defn child
   [node idx storage]
-  (if (instance? Node node)
-    (node-child node idx storage)
-    (arrays/aget (.-children node) idx)))
+  (when (instance? Node node)
+    (node-child node idx storage)))
 
 (defn- keys-for [set path]
   (loop [level (.-shift set)
@@ -1089,7 +1125,8 @@
       ;; introducing new root
       :else
       (alter-btset set
-                   (Node. (arrays/amap node-lim-key roots) roots nil)
+                   (new-node (arrays/amap node-lim-key roots) roots
+                          (arrays/make-array (count roots)))
                    (inc (.-shift set))
                    (inc (.-cnt set))))))
 
@@ -1114,10 +1151,6 @@
                        new-root
                        (.-shift set)
                        (dec (.-cnt set))))))))
-
-(def conj conj)
-(def disj disj)
-(def BTSet BTSet)
 
 (defn slice
   "An iterator for part of the set with provided boundaries.
@@ -1173,7 +1206,7 @@
          (recur
           (->> current-level
                (arr-partition-approx min-len max-len)
-               (arr-map-inplace #(Node. (arrays/amap node-lim-key %) % nil)))
+               (arr-map-inplace #(new-node (arrays/amap node-lim-key %) % nil)))
           (inc shift)))))))
 
 (defn from-sequential
