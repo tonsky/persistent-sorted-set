@@ -276,7 +276,7 @@
   (node-conj          [_ cmp key storage])
   (node-disj          [_ cmp key root? left right storage]))
 
-(defn- set-child
+(defn- set-child!
   [children idx child]
   (aset children idx child))
 
@@ -328,15 +328,6 @@
   (let [addresses (if (nil? addresses)
                     (arrays/make-array (arrays/alength keys))
                     addresses)]
-    (when (not= (count keys) (count children) (count addresses))
-      (js/console.trace))
-
-    (assert (= (count keys) (count children) (count addresses))
-            (str
-             "counts not matched"
-             {:keys-count (count keys)
-              :children-count (count children)
-              :addresses-count (count addresses)}))
     (Node. keys children addresses)))
 
 (deftype Node [keys children ^:mutable addresses]
@@ -388,6 +379,7 @@
 
   (node-child [_this idx ^IStorage storage]
     (when-not (= -1 idx)
+      ;; TODO: Remove when the implementation is stable
       (assert (or (and (seq children) (arrays/aget children idx)) ; child exists
                   (and (seq addresses) (arrays/aget addresses idx)))
               (str "Neither child or address exists" {:keys keys :addresses addresses :idx idx :children children}))
@@ -395,7 +387,7 @@
             address (when addresses (arrays/aget addresses idx))]
         (if-not child
           (let [child (protocol/restore storage address)]
-            (arrays/aset children idx child))
+            (set-child! children idx child))
           (when (and storage address)
             (protocol/accessed storage address)))
         (arrays/aget children idx))))
@@ -414,7 +406,6 @@
         (let [new-keys     (check-n-splice cmp keys     idx (inc idx) (arrays/amap node-lim-key nodes))
               new-children (splice             children idx (inc idx) nodes)
               new-addresses (splice addresses idx (inc idx) (arrays/make-array (count nodes)))]
-          (assert (every? some? new-children) (str "children is nil: " new-children))
           (if (<= (arrays/alength new-children) max-len)
             ;; ok as is
             (arrays/array (new-node new-keys new-children new-addresses))
