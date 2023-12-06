@@ -643,16 +643,20 @@
 
 (defn- -rpath
   "Returns rightmost path possible starting from node and going deeper"
-  [node ^number path ^number level]
+  [node ^number path ^number level storage]
   (loop [node  node
          path  path
          level level]
     (if (pos? level)
       ;; inner node
-      (recur
-       (arrays/alast (.-children node))
-       (path-set path level (dec (arrays/alength (.-children node))))
-       (dec level))
+      (let [last-idx   (dec (arrays/alength (.-children node)))
+            node-child (or (arrays/alast (.-children node))
+                           (child node last-idx storage))]
+        (recur
+         node-child
+         (path-set path level last-idx)
+         (dec level)
+         storage))
       ;; leaf
       (path-set path 0 (dec (arrays/alength (.-keys node)))))))
 
@@ -664,7 +668,7 @@
     empty-path
     (or
      (-next-path set (.-root set) path (.-shift set))
-     (path-inc (-rpath (.-root set) empty-path (.-shift set))))))
+     (path-inc (-rpath (.-root set) empty-path (.-shift set) (.-storage set))))))
 
 (defn- -prev-path [set node ^number path ^number level]
   (let [idx (path-get path level)]
@@ -679,7 +683,7 @@
 
       ;; branch that was overflow before
       (>= idx (node-len node))
-      (-rpath node path level)
+      (-rpath node path level (.-storage set))
 
       :else
       (let [path' (-prev-path set (child node idx (.-storage set)) path (dec level))]
@@ -694,7 +698,7 @@
 
           ;; nested overflow, advance current idx, reset subsequent indexes
           :else
-          (let [path' (-rpath (child node (dec idx) (.-storage set)) path (dec level))]
+          (let [path' (-rpath (child node (dec idx) (.-storage set)) path (dec level) (.-storage set))]
             (path-set path' level (dec idx))))))))
 
 (defn- prev-path
@@ -702,7 +706,7 @@
    Will overflow at leaf if at beginning of tree"
   [set ^number path]
   (if (> (path-get path (inc (.-shift set))) 0) ;; overflow
-    (-rpath (.-root set) path (.-shift set))
+    (-rpath (.-root set) path (.-shift set) (.-storage set))
     (or
      (-prev-path set (.-root set) path (.-shift set))
      (path-dec empty-path))))
@@ -714,7 +718,7 @@
   [set]
   (when (pos? (node-len (.-root set)))
     (let [left  empty-path
-          rpath (-rpath (.-root set) empty-path (.-shift set))
+          rpath (-rpath (.-root set) empty-path (.-shift set) (.-storage set))
           right (next-path set rpath)]
       (iter set left right))))
 
@@ -1011,7 +1015,7 @@
    It’s a virtual path that is bigger than any path in a tree"
   [^BTSet set key comparator]
   (if (nil? key)
-    (path-inc (-rpath (.-root set) empty-path (.-shift set)))
+    (path-inc (-rpath (.-root set) empty-path (.-shift set) (.-storage set)))
     (loop [node  (.-root set)
            path  empty-path
            level (.-shift set)]
