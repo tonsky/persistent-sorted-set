@@ -1247,8 +1247,11 @@
   "Store each not-yet-stored node by calling IStorage::store and remembering
    returned address. Incremental, won’t store same node twice on subsequent calls.
    Returns root address. Remember it and use it for restore"
-  [^BTSet set ^IStorage storage]
-  (store-aux set storage))
+  ([^BTSet set]
+   (assert (some? (.-storage set)))
+   (store-aux set (.-storage set)))
+  ([^BTSet set ^IStorage storage]
+   (store-aux set storage)))
 
 (defn settings [set]
   {:branching-factor max-len
