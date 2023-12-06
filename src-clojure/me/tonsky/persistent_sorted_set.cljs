@@ -510,7 +510,16 @@
   ;; ^:const
   uninitialized-address nil)
 
-(deftype BTSet [^:mutable storage root shift cnt comparator meta ^:mutable _hash ^:mutable _address]
+(defn- ensure-root-node!
+  "Restore root node if it's not loaded yet"
+  [storage root address]
+  (or root
+      (when address
+        (let [node (protocol/restore storage address)]
+          (set! root node)
+          node))))
+
+(deftype BTSet [^:mutable storage ^:mutable root shift cnt comparator meta ^:mutable _hash ^:mutable _address]
   Object
   (toString [this] (pr-str* this))
 
@@ -546,6 +555,7 @@
   (store-aux [_this storage*]
     (when (nil? storage)
       (set! storage storage*))
+    (ensure-root-node! storage root _address)
     (when (nil? _address)
       (assert (some? storage) "storage couldn't be nil")
       (set! _address (store-aux root storage)))
@@ -553,8 +563,10 @@
 
   ILookup
   (-lookup [_ k]
+    (ensure-root-node! storage root _address)
     (node-lookup root comparator k storage))
   (-lookup [_ k not-found]
+    (ensure-root-node! storage root _address)
     (or (node-lookup root comparator k storage) not-found))
 
   ISeqable
@@ -1232,11 +1244,7 @@
   ([cmp address ^IStorage storage]
    (restore-by cmp address storage {}))
   ([cmp address ^IStorage storage {:keys [set-metadata]}]
-   (when-let [root (protocol/restore storage address)]
-     (BTSet. storage root
-                                (:shift set-metadata)
-                                (:count set-metadata)
-                                cmp nil uninitialized-hash address))))
+   (BTSet. storage nil (:shift set-metadata) (:count set-metadata) cmp nil uninitialized-hash address)))
 
 (defn restore
   "Constructs lazily-loaded set from storage and root address.
