@@ -554,21 +554,21 @@
             node))))
 
   IStore
-  (store-aux [_this storage*]
+  (store-aux [this storage*]
     (when (nil? storage)
       (set! storage storage*))
-    (ensure-root-node! storage root _address)
+    (-ensure-root-node this)
     (when (nil? _address)
       (assert (some? storage) "storage couldn't be nil")
       (set! _address (store-aux root storage)))
     _address)
 
   ILookup
-  (-lookup [_ k]
-    (ensure-root-node! storage root _address)
+  (-lookup [this k]
+    (-ensure-root-node this)
     (node-lookup root comparator k storage))
-  (-lookup [_ k not-found]
-    (ensure-root-node! storage root _address)
+  (-lookup [this k not-found]
+    (-ensure-root-node this)
     (or (node-lookup root comparator k storage) not-found))
 
   ISeqable
