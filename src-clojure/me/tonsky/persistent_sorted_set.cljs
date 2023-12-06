@@ -544,13 +544,12 @@
 
   IStore
   (store-aux [_this storage*]
-    (let [storage (or storage storage*)]
-      (assert (some? storage))
-      (when (nil? storage)
-        (set! storage storage*))
-      (when (nil? _address)
-        (set! _address (store-aux root storage)))
-      _address))
+    (when (nil? storage)
+      (set! storage storage*))
+    (when (nil? _address)
+      (assert (some? storage) "storage couldn't be nil")
+      (set! _address (store-aux root storage)))
+    _address)
 
   ILookup
   (-lookup [_ k]
