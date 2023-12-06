@@ -510,7 +510,7 @@
   ;; ^:const
   uninitialized-address nil)
 
-(deftype BTSet [storage root shift cnt comparator meta ^:mutable _hash ^:mutable _address]
+(deftype BTSet [^:mutable storage root shift cnt comparator meta ^:mutable _hash ^:mutable _address]
   Object
   (toString [this] (pr-str* this))
 
@@ -546,6 +546,8 @@
   (store-aux [_this storage*]
     (let [storage (or storage storage*)]
       (assert (some? storage))
+      (when (nil? storage)
+        (set! storage storage*))
       (when (nil? _address)
         (set! _address (store-aux root storage)))
       _address))
