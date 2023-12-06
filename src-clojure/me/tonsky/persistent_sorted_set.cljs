@@ -622,7 +622,7 @@
 
 (defn- keys-for [set path]
   (loop [level (.-shift set)
-         node  (.-root set)]
+         node  (-ensure-root-node set)]
     (if (pos? level)
       (recur
        (dec level)
@@ -680,8 +680,8 @@
   (if (neg? path)
     empty-path
     (or
-     (-next-path set (.-root set) path (.-shift set))
-     (path-inc (-rpath (.-root set) empty-path (.-shift set) (.-storage set))))))
+     (-next-path set (-ensure-root-node set) path (.-shift set))
+     (path-inc (-rpath (-ensure-root-node set) empty-path (.-shift set) (.-storage set))))))
 
 (defn- -prev-path [set node ^number path ^number level]
   (let [idx (path-get path level)]
@@ -719,9 +719,9 @@
    Will overflow at leaf if at beginning of tree"
   [set ^number path]
   (if (> (path-get path (inc (.-shift set))) 0) ;; overflow
-    (-rpath (.-root set) path (.-shift set) (.-storage set))
+    (-rpath (-ensure-root-node set) path (.-shift set) (.-storage set))
     (or
-     (-prev-path set (.-root set) path (.-shift set))
+     (-prev-path set (-ensure-root-node set) path (.-shift set))
      (path-dec empty-path))))
 
 (declare iter riter)
@@ -729,9 +729,9 @@
 (defn- btset-iter
   "Iterator that represents the whole set"
   [set]
-  (when (pos? (node-len (.-root set)))
+  (when (pos? (node-len (-ensure-root-node set)))
     (let [left  empty-path
-          rpath (-rpath (.-root set) empty-path (.-shift set) (.-storage set))
+          rpath (-rpath (-ensure-root-node set) empty-path (.-shift set) (.-storage set))
           right (next-path set rpath)]
       (iter set left right))))
 
@@ -992,7 +992,7 @@
     1
 
     :else
-    (-distance set (.-root set) path-l path-r (.-shift set))))
+    (-distance set (-ensure-root-node set) path-l path-r (.-shift set))))
 
 (defn est-count [iter]
   (distance (.-set iter) (.-left iter) (.-right iter)))
@@ -1005,7 +1005,7 @@
   [^BTSet set key comparator]
   (if (nil? key)
     empty-path
-    (loop [node  (.-root set)
+    (loop [node  (-ensure-root-node set)
            path  empty-path
            level (.-shift set)]
       (let [keys-l (node-len node)]
@@ -1028,8 +1028,8 @@
    It’s a virtual path that is bigger than any path in a tree"
   [^BTSet set key comparator]
   (if (nil? key)
-    (path-inc (-rpath (.-root set) empty-path (.-shift set) (.-storage set)))
-    (loop [node  (.-root set)
+    (path-inc (-rpath (-ensure-root-node set) empty-path (.-shift set) (.-storage set)))
+    (loop [node  (-ensure-root-node set)
            path  empty-path
            level (.-shift set)]
       (let [keys-l (node-len node)]
@@ -1118,7 +1118,7 @@
 (defn conj
   "Analogue to [[clojure.core/conj]] with comparator that overrides the one stored in set."
   [^BTSet set key cmp]
-  (let [roots (node-conj (.-root set) cmp key (.-storage set))]
+  (let [roots (node-conj (-ensure-root-node set) cmp key (.-storage set))]
     (cond
       ;; tree not changed
       (nil? roots)
@@ -1142,7 +1142,7 @@
 (defn disj
   "Analogue to [[clojure.core/disj]] with comparator that overrides the one stored in set."
   [^BTSet set key cmp]
-  (let [new-roots (node-disj (.-root set) cmp key true nil nil (.-storage set))]
+  (let [new-roots (node-disj (-ensure-root-node set) cmp key true nil nil (.-storage set))]
     (if (nil? new-roots) ;; nothing changed, key wasn't in the set
       set
       (let [new-root (arrays/aget new-roots 0)]
