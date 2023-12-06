@@ -655,8 +655,7 @@
         (recur
          node-child
          (path-set path level last-idx)
-         (dec level)
-         storage))
+         (dec level)))
       ;; leaf
       (path-set path 0 (dec (arrays/alength (.-keys node)))))))
 
