@@ -512,7 +512,7 @@
 
 (defn- ensure-root-node!
   "Restore root node if it's not loaded yet"
-  [storage root address]
+  [storage ^:mutable root address]
   (or root
       (when address
         (let [node (protocol/restore storage address)]
