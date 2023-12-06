@@ -510,14 +510,8 @@
   ;; ^:const
   uninitialized-address nil)
 
-(defn- ensure-root-node!
-  "Restore root node if it's not loaded yet"
-  [storage ^:mutable root address]
-  (or root
-      (when address
-        (let [node (protocol/restore storage address)]
-          (set! root node)
-          node))))
+(defprotocol IRoot
+  (-ensure-root-node [_]))
 
 (deftype BTSet [^:mutable storage ^:mutable root shift cnt comparator meta ^:mutable _hash ^:mutable _address]
   Object
@@ -550,6 +544,14 @@
 
   ISet
   (-disjoin [this key] (disj this key comparator))
+
+  IRoot
+  (-ensure-root-node [_this]
+    (or root
+        (when _address
+          (let [node (protocol/restore storage _address)]
+            (set! root node)
+            node))))
 
   IStore
   (store-aux [_this storage*]
