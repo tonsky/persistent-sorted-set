@@ -3,4 +3,5 @@
 (defprotocol IStorage
   (restore [this address])
   (accessed [this address])
-  (store [this node]))
+  (store [this node])
+  (delete [this address]))

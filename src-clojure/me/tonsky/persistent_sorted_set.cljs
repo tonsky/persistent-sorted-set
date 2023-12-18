@@ -406,6 +406,8 @@
         (let [new-keys     (check-n-splice cmp keys     idx (inc idx) (arrays/amap node-lim-key nodes))
               new-children (splice             children idx (inc idx) nodes)
               new-addresses (splice addresses idx (inc idx) (arrays/make-array (count nodes)))]
+          (when-let [unused-address (aget addresses idx)]
+            (protocol/delete storage unused-address))
           (if (<= (arrays/alength new-children) max-len)
             ;; ok as is
             (arrays/array (new-node new-keys new-children new-addresses))
@@ -435,6 +437,11 @@
                   new-keys     (check-n-splice cmp keys     left-idx right-idx (arrays/amap node-lim-key disjned))
                   new-children (splice             children left-idx right-idx disjned)
                   new-addresses (splice            addresses left-idx right-idx (arrays/make-array (count disjned)))]
+              (when (> right-idx left-idx)
+                (let [unused-addresses (.slice (arrays/aclone addresses) left-idx right-idx)]
+                  (doseq [unused-address unused-addresses]
+                    (when unused-address
+                      (protocol/delete storage unused-address)))))
               (rotate (new-node new-keys new-children new-addresses) root? left right))))))))
 
 (deftype Leaf [keys]
