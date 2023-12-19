@@ -342,7 +342,7 @@
                     addresses)]
     (Node. keys children addresses address dirty?)))
 
-(deftype Node [keys children ^:mutable addresses ^:mutable address dirty?]
+(deftype Node [keys children ^:mutable addresses ^:mutable address ^:mutable dirty?]
   IStore
   (store-aux [this ^IStorage storage]
     (ensure-addresses! this (count children))
@@ -360,6 +360,7 @@
       addresses))
 
     (let [new-address (protocol/store storage this address)]
+      (set! dirty? false)
       (set! address new-address)
       new-address))
 
@@ -472,11 +473,12 @@
            :or {dirty? true}}]
   (Leaf. keys address dirty?))
 
-(deftype Leaf [keys ^:mutable address dirty?]
+(deftype Leaf [keys ^:mutable address ^:mutable dirty?]
   IStore
   (store-aux [this storage]
     (if (or dirty? (nil? address))
       (let [new-address (protocol/store storage this address)]
+        (set! dirty? false)
         (set! address new-address)
         new-address)
       address))
