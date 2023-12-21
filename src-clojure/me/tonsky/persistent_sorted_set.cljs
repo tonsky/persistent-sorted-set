@@ -378,7 +378,7 @@
     (ensure-addresses! this (count children))
     (ensure-addresses! next (count (.-children next)))
     (when-let [next-address (.-address next)]
-      (protocol/delete storage next-address))
+      (protocol/delete storage [next-address] nil))
     (new-node (arrays/aconcat keys (.-keys next))
               (arrays/aconcat children (.-children next))
               (arrays/aconcat addresses (.-addresses next))
@@ -459,11 +459,9 @@
                   new-children (splice             children left-idx right-idx disjned)
                   new-addresses (splice            addresses left-idx right-idx (node-addresses->array disjned))]
               (when (> right-idx left-idx)
-                (let [unused-addresses (.slice addresses left-idx right-idx)
-                      new-addresses-set (set (remove nil? new-addresses))]
-                  (doseq [unused-address unused-addresses]
-                    (when (and unused-address (not (contains? new-addresses-set unused-address)))
-                      (protocol/delete storage unused-address)))))
+                (let [unused-addresses (.slice addresses left-idx right-idx)]
+                  (when storage
+                    (protocol/delete storage unused-addresses new-addresses))))
               (rotate (new-node new-keys new-children new-addresses {:address address})
                       root? left right storage))))))))
 
@@ -494,7 +492,7 @@
 
   (node-merge [_ ^Object next storage]
     (when-let [next-address (.-address next)]
-      (protocol/delete storage next-address))
+      (protocol/delete storage [next-address] nil))
     (new-leaf (arrays/aconcat keys (.-keys next)) {:address address}))
 
   (node-merge-n-split [_ ^Leaf next]

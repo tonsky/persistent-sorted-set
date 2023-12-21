@@ -4,4 +4,4 @@
   (restore [this address])
   (accessed [this address])
   (store [this node address])
-  (delete [this address]))
+  (delete [this unused-addresses kept-addresses]))
