@@ -6,7 +6,6 @@
   (:require
    [me.tonsky.persistent-sorted-set.arrays :as arrays]
    [me.tonsky.persistent-sorted-set.protocol :refer [IStorage] :as protocol]
-   [goog.object :as gobj]
    [clojure.set :as set])
   (:require-macros
    [me.tonsky.persistent-sorted-set.arrays :as arrays]))
@@ -316,7 +315,7 @@
 
 (defn- node-addresses->array
   [^js children]
-  (let [children-addresses (map #(gobj/get % "_address") children)]
+  (let [children-addresses (map #(.-_address %) children)]
     (arrays/into-array children-addresses)))
 
 (defn- ensure-addresses!
@@ -334,14 +333,17 @@
 (declare Node)
 
 (defn new-node
-  [keys children addresses & {:keys [address dirty]
-                              :or {dirty true}}]
-  (let [addresses (if (nil? addresses)
-                    (if (seq children)
-                      (node-addresses->array children)
-                      (arrays/make-array (arrays/alength keys)))
-                    addresses)]
-    (Node. keys children addresses address dirty)))
+  ([keys children addresses]
+   (new-node keys children addresses nil))
+  ([keys children addresses address]
+   (new-node keys children addresses address true))
+  ([keys children addresses address dirty?]
+   (let [addresses (if (nil? addresses)
+                     (if (seq children)
+                       (node-addresses->array children)
+                       (arrays/make-array (arrays/alength keys)))
+                     addresses)]
+     (Node. keys children addresses address dirty?))))
 
 (deftype Node [keys children ^:mutable _addresses ^:mutable _address ^:mutable _dirty]
   IStore
@@ -383,7 +385,7 @@
     (new-node (arrays/aconcat keys (.-keys next))
               (arrays/aconcat children (.-children next))
               (arrays/aconcat _addresses (.-_addresses next))
-              {:address _address}))
+              _address))
 
   (node-merge-n-split [this ^Node next]
     (ensure-addresses! this (count children))
@@ -394,7 +396,7 @@
       (return-array (new-node (arrays/aget ks 0)
                               (arrays/aget ps 0)
                               (arrays/aget as 0)
-                              {:address _address})
+                              _address)
                     (new-node (arrays/aget ks 1)
                               (arrays/aget ps 1)
                               (arrays/aget as 1)
@@ -431,14 +433,14 @@
               new-addresses (splice _addresses idx (inc idx) (node-addresses->array nodes))]
           (if (<= (arrays/alength new-children) max-len)
             ;; ok as is
-            (arrays/array (new-node new-keys new-children new-addresses {:address _address}))
+            (arrays/array (new-node new-keys new-children new-addresses _address))
             ;; gotta split it up
             (let [middle  (arrays/half (arrays/alength new-children))]
               (arrays/array
                (new-node (.slice new-keys     0 middle)
                          (.slice new-children 0 middle)
                          (.slice new-addresses 0 middle)
-                         {:address _address})
+                         _address)
                (new-node (.slice new-keys     middle)
                          (.slice new-children middle)
                          (.slice new-addresses middle)))))))))
@@ -464,14 +466,17 @@
                       removed (set/difference (set (remove nil? cut-addresses)) (set (remove nil? new-addresses)))]
                   (when (and storage (seq removed))
                     (protocol/delete storage removed))))
-              (rotate (new-node new-keys new-children new-addresses {:address _address})
+              (rotate (new-node new-keys new-children new-addresses _address)
                       root? left right storage))))))))
 
 (declare Leaf)
 (defn- new-leaf
-  [keys & {:keys [address dirty]
-           :or {dirty true}}]
-  (Leaf. keys address dirty))
+  ([keys]
+   (new-leaf keys nil))
+  ([keys address]
+   (new-leaf keys address true))
+  ([keys address dirty]
+   (Leaf. keys address dirty)))
 
 (deftype Leaf [keys ^:mutable _address ^:mutable _dirty]
   IStore
@@ -495,12 +500,12 @@
   (node-merge [_ ^Object next storage]
     (when-let [next-address (.-_address next)]
       (protocol/delete storage [next-address]))
-    (new-leaf (arrays/aconcat keys (.-keys next)) {:address _address}))
+    (new-leaf (arrays/aconcat keys (.-keys next)) _address))
 
   (node-merge-n-split [_ ^Leaf next]
     (let [ks (merge-n-split keys (.-keys next))]
-      (return-array (new-leaf (arrays/aget ks 0) {:address _address})
-                    (new-leaf (arrays/aget ks 1) {:address (.-_address next)}))))
+      (return-array (new-leaf (arrays/aget ks 0) _address)
+                    (new-leaf (arrays/aget ks 1) (.-_address next)))))
 
   (node-child [_this idx _storage]
     (arrays/aget keys idx))
@@ -525,22 +530,22 @@
           (if (> idx middle)
               ;; new key goes to the second half
             (arrays/array
-             (new-leaf (.slice keys 0 middle) {:address _address})
+             (new-leaf (.slice keys 0 middle) _address)
              (new-leaf (cut-n-splice keys middle keys-l idx idx (arrays/array key))))
               ;; new key goes to the first half
             (arrays/array
-             (new-leaf (cut-n-splice keys 0 middle idx idx (arrays/array key)) {:address _address})
+             (new-leaf (cut-n-splice keys 0 middle idx idx (arrays/array key)) _address)
              (new-leaf (.slice keys middle keys-l)))))
 
         ;; ok as is
         :else
-        (arrays/array (new-leaf (splice keys idx idx (arrays/array key)) {:address _address})))))
+        (arrays/array (new-leaf (splice keys idx idx (arrays/array key)) _address)))))
 
   (node-disj [_ cmp key root? left right storage]
     (let [idx (lookup-exact cmp keys key)]
       (when-not (== -1 idx) ;; key is here
         (let [new-keys (splice keys idx (inc idx) (arrays/array))]
-          (rotate (new-leaf new-keys {:address _address}) root? left right storage))))))
+          (rotate (new-leaf new-keys _address) root? left right storage))))))
 
 ;; BTSet
 
