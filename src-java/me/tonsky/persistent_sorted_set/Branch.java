@@ -187,7 +187,9 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
     if (1 == nodes.length) {
       ANode<Key, Address> node = nodes[0];
       Key[] newKeys;
-      if (0 == cmp.compare(node.maxKey(), _keys[ins])) {
+      // only share arrays if the new node is not editable, otherwise
+      // in-place transient updates would corrupt this node (issue-19)
+      if (!settings.editable() && 0 == cmp.compare(node.maxKey(), _keys[ins])) {
         newKeys = _keys;
       } else {
         newKeys = Arrays.copyOfRange(_keys, 0, _len);
@@ -196,7 +198,7 @@ public class Branch<Key, Address> extends ANode<Key, Address> {
 
       Address[] newAddresses = null;
       Object[] newChildren = null;
-      if (node == child(storage, ins)) { // TODO how is this possible?
+      if (!settings.editable() && node == child(storage, ins)) { // TODO how is this possible?
         newAddresses = _addresses;
         newChildren = _children;
       } else {
