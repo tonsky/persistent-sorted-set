@@ -11,16 +11,17 @@ on:
       - 'src-java/**'
       - 'test-clojure/**'
       - project.clj
+      - '.github/workflows/**'
 
 jobs:  
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     env:
       CLOJARS_TOKEN: ${{ secrets.CLOJARS_DEPLOY_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       - run: |
           echo "JAVA_HOME=$JAVA_HOME_11_X64" >> $GITHUB_ENV
@@ -28,9 +29,10 @@ jobs:
           echo "$JAVA_HOME_11_X64/bin" >> $GITHUB_PATH
 
       - name: Setup Clojure
-        uses: DeLaGuardo/setup-clojure@10.0
+        uses: DeLaGuardo/setup-clojure@13
         with:
-          cli: 1.11.1.1200
+          cli: latest
+          lein: latest
       
       - run: ./script/bootstrap.sh
 
@@ -50,7 +52,7 @@ jobs:
         run: |
           lein deploy clojars
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v7
         with:
           name: jar
           path: 'target/*.jar'
