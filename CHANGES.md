@@ -1,3 +1,7 @@
+# 0.3.1
+
+- JVM: Fixed transient corruption #13 #19
+
 # 0.3.0
 
 - JVM: Per-set branching factor

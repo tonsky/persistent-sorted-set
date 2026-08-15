@@ -24,7 +24,7 @@ lein jar
 Dependency:
 
 ```clj
-[persistent-sorted-set "0.3.0"]
+[persistent-sorted-set "0.3.1"]
 ```
 
 Code:
