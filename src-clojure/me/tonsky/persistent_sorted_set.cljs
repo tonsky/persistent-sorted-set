@@ -583,7 +583,7 @@
    Will overflow at leaf if at beginning of tree"
   [set ^number path]
   (if (> (path-get path (inc (.-shift set))) 0) ;; overflow
-    (-rpath (.-root set) path (.-shift set))
+    (-rpath (.-root set) empty-path (.-shift set))
     (or
       (-prev-path (.-root set) path (.-shift set))
       (path-dec empty-path))))

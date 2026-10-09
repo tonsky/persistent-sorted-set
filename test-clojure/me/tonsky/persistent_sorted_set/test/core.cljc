@@ -358,3 +358,22 @@
       (is (= (list 2500) (-> (set/rslice (apply set/sorted-set (range 10000)) 7500 2500)
                              (set/seek 5000)
                              (set/seek 2500)))))))
+;; issue-20
+(deftest test-rseq-full-nodes
+  (doseq [n    (concat (range 1 70) [1023 1024 1025 2047 2048 2049])
+          :let [asc  (range n)
+                desc (range (dec n) -1 -1)
+                bounded #(take (inc n) %)]
+          s    [(into (set/sorted-set) asc)
+                (apply set/sorted-set asc)
+                (into (set/sorted-set) (shuffle asc))]]
+    (testing (str "n = " n)
+      (is (= n (count (bounded (rseq s)))))
+      (is (= desc (bounded (rseq s))))
+      (is (= desc (bounded (set/rslice s nil nil))))
+      (is (= desc (bounded (set/rslice s n -1))))
+      (is (= desc (bounded (rseq (set/slice s nil nil)))))
+      (is (= asc  (bounded (rseq (rseq s)))))
+      (is (= desc (bounded (set/seek (rseq s) n))))
+      (is (= desc (bounded (set/seek (rseq s) (dec n)))))
+      (is (= (bounded (reverse (rseq (rseq s)))) (bounded (rseq s)))))))

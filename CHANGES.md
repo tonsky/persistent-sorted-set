@@ -1,3 +1,7 @@
+# 0.3.2
+
+- CLJS: Fixed rseq on a cljs set of exactly 32 keys never returning #20
+
 # 0.3.1
 
 - JVM: Fixed transient corruption #13 #19
